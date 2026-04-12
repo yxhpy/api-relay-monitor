@@ -1,0 +1,11 @@
+services:
+  api-relay-monitor:
+    build: .
+    ports:
+      - "8900:8000"
+    volumes:
+      - ./data:/app/data
+      - ./.env:/app/.env
+    environment:
+      - DATABASE_URL=sqlite+aiosqlite:///./data/relay_monitor.db
+    restart: unless-stopped

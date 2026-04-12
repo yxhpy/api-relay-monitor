@@ -1,0 +1,1322 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>API 中转站智能监控</title>
+  <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" />
+  <style>
+    :root {
+      --primary: #409EFF;
+      --primary-dark: #337ecc;
+      --sidebar-bg: #1d1e2c;
+      --sidebar-active: #2a2b3d;
+      --sidebar-text: #a3a6b7;
+      --sidebar-text-active: #ffffff;
+      --success: #67c23a;
+      --warning: #e6a23c;
+      --danger: #f56c6c;
+      --info: #909399;
+      --card-shadow: 0 2px 12px rgba(0,0,0,0.06);
+      --card-shadow-hover: 0 4px 20px rgba(0,0,0,0.1);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f2f5; color: #303133; }
+    .app-container { display: flex; height: 100vh; overflow: hidden; }
+
+    /* Sidebar */
+    .sidebar {
+      width: 220px; min-width: 220px; background: var(--sidebar-bg);
+      display: flex; flex-direction: column; transition: width 0.3s;
+      box-shadow: 2px 0 8px rgba(0,0,0,0.15); z-index: 100;
+    }
+    .sidebar.collapsed { width: 64px; min-width: 64px; }
+    .sidebar.collapsed .sidebar-label { display: none; }
+    .sidebar.collapsed .sidebar-logo span { display: none; }
+    .sidebar-logo {
+      height: 60px; display: flex; align-items: center; padding: 0 16px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .sidebar-logo svg { width: 28px; height: 28px; }
+    .sidebar-logo span { color: #fff; font-size: 15px; font-weight: 600; margin-left: 10px; white-space: nowrap; }
+    .sidebar-nav { flex: 1; padding: 8px 0; overflow-y: auto; }
+    .sidebar-item {
+      display: flex; align-items: center; padding: 12px 20px; cursor: pointer;
+      color: var(--sidebar-text); transition: all 0.2s; margin: 2px 8px;
+      border-radius: 8px; font-size: 14px; white-space: nowrap;
+    }
+    .sidebar-item:hover { background: var(--sidebar-active); color: #cfd0db; }
+    .sidebar-item.active { background: linear-gradient(135deg, #409EFF 0%, #5b8def 100%); color: #fff; box-shadow: 0 2px 8px rgba(64,158,255,0.3); }
+    .sidebar-item .el-icon { font-size: 18px; margin-right: 12px; flex-shrink: 0; }
+    .sidebar.collapsed .sidebar-item { padding: 12px; justify-content: center; }
+    .sidebar.collapsed .sidebar-item .el-icon { margin-right: 0; }
+    .sidebar-label { overflow: hidden; }
+
+    /* Main area */
+    .main-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    .header-bar {
+      height: 60px; background: #fff; display: flex; align-items: center;
+      padding: 0 24px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); z-index: 50;
+      justify-content: space-between;
+    }
+    .header-left { display: flex; align-items: center; gap: 16px; }
+    .header-title { font-size: 16px; font-weight: 600; color: #303133; }
+    .header-right { display: flex; align-items: center; gap: 12px; }
+    .content-area { flex: 1; overflow-y: auto; padding: 20px; }
+
+    /* Page transitions */
+    .fade-enter-active, .fade-leave-active { transition: opacity 0.2s, transform 0.2s; }
+    .fade-enter-from { opacity: 0; transform: translateY(8px); }
+    .fade-leave-to { opacity: 0; transform: translateY(-8px); }
+
+    /* Dashboard stat cards */
+    .stat-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 20px; }
+    .stat-card {
+      background: #fff; border-radius: 12px; padding: 20px 24px;
+      box-shadow: var(--card-shadow); transition: all 0.3s; position: relative; overflow: hidden;
+    }
+    .stat-card:hover { box-shadow: var(--card-shadow-hover); transform: translateY(-2px); }
+    .stat-card .stat-icon {
+      width: 44px; height: 44px; border-radius: 10px; display: flex;
+      align-items: center; justify-content: center; font-size: 22px; margin-bottom: 12px;
+    }
+    .stat-card .stat-value { font-size: 28px; font-weight: 700; line-height: 1.2; }
+    .stat-card .stat-label { font-size: 13px; color: #909399; margin-top: 4px; }
+    .stat-card .stat-bg { position: absolute; right: -20px; top: -20px; width: 100px; height: 100px; border-radius: 50%; opacity: 0.06; }
+
+    .stat-card.total .stat-icon { background: rgba(64,158,255,0.1); color: #409EFF; }
+    .stat-card.total .stat-value { color: #409EFF; }
+    .stat-card.total .stat-bg { background: #409EFF; }
+    .stat-card.active .stat-icon { background: rgba(103,194,58,0.1); color: #67c23a; }
+    .stat-card.active .stat-value { color: #67c23a; }
+    .stat-card.active .stat-bg { background: #67c23a; }
+    .stat-card.score .stat-icon { background: rgba(230,162,60,0.1); color: #e6a23c; }
+    .stat-card.score .stat-value { color: #e6a23c; }
+    .stat-card.score .stat-bg { background: #e6a23c; }
+    .stat-card.risk .stat-icon { background: rgba(245,108,108,0.1); color: #f56c6c; }
+    .stat-card.risk .stat-value { color: #f56c6c; }
+    .stat-card.risk .stat-bg { background: #f56c6c; }
+
+    /* Section card */
+    .section-card {
+      background: #fff; border-radius: 12px; padding: 20px 24px;
+      box-shadow: var(--card-shadow); margin-bottom: 20px;
+    }
+    .section-title {
+      font-size: 16px; font-weight: 600; margin-bottom: 16px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .section-title .el-icon { margin-right: 8px; color: var(--primary); }
+
+    /* Top picks cards */
+    .top-picks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 20px; }
+    .pick-card {
+      background: #fff; border-radius: 12px; padding: 20px;
+      box-shadow: var(--card-shadow); transition: all 0.3s; border: 1px solid transparent; cursor: pointer;
+    }
+    .pick-card:hover { border-color: var(--primary); box-shadow: var(--card-shadow-hover); transform: translateY(-2px); }
+    .pick-card .pick-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .pick-card .pick-name { font-size: 15px; font-weight: 600; }
+    .pick-card .pick-score { font-size: 24px; font-weight: 700; }
+    .pick-card .pick-meta { font-size: 13px; color: #909399; line-height: 1.8; }
+
+    /* Quick actions */
+    .quick-actions { display: flex; gap: 12px; margin-bottom: 20px; }
+    .quick-action-btn {
+      flex: 1; padding: 16px; border-radius: 12px; border: none; cursor: pointer;
+      display: flex; align-items: center; gap: 12px; font-size: 14px; font-weight: 500;
+      transition: all 0.3s; color: #fff;
+    }
+    .quick-action-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+    .quick-action-btn.crawl { background: linear-gradient(135deg, #409EFF 0%, #5b8def 100%); }
+    .quick-action-btn.analyze { background: linear-gradient(135deg, #67c23a 0%, #85ce61 100%); }
+    .quick-action-btn.report { background: linear-gradient(135deg, #e6a23c 0%, #f0c78a 100%); }
+    .quick-action-btn .action-icon { font-size: 24px; }
+
+    /* Timeline */
+    .risk-timeline .el-timeline-item__wrapper { padding-left: 16px; }
+
+    /* Activity feed */
+    .activity-item { padding: 10px 0; border-bottom: 1px solid #f2f3f5; display: flex; align-items: center; gap: 12px; font-size: 13px; }
+    .activity-item:last-child { border-bottom: none; }
+    .activity-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+    /* Score color helpers */
+    .score-bar .el-progress-bar__outer { border-radius: 8px; }
+    .score-bar .el-progress-bar__inner { border-radius: 8px; transition: width 0.6s; }
+
+    /* Responsive */
+    @media (max-width: 1200px) { .stat-cards { grid-template-columns: repeat(2, 1fr); } .top-picks { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 768px) {
+      .sidebar { width: 64px; min-width: 64px; }
+      .sidebar .sidebar-label { display: none; }
+      .sidebar .sidebar-logo span { display: none; }
+      .sidebar .sidebar-item { padding: 12px; justify-content: center; }
+      .sidebar .sidebar-item .el-icon { margin-right: 0; }
+      .stat-cards { grid-template-columns: 1fr; }
+      .top-picks { grid-template-columns: 1fr; }
+      .quick-actions { flex-direction: column; }
+    }
+
+    /* Markdown content */
+    .markdown-content { line-height: 1.8; }
+    .markdown-content h1, .markdown-content h2, .markdown-content h3 { margin: 16px 0 8px; }
+    .markdown-content p { margin: 8px 0; }
+    .markdown-content ul, .markdown-content ol { padding-left: 20px; }
+    .markdown-content code { background: #f5f7fa; padding: 2px 6px; border-radius: 4px; font-size: 13px; }
+    .markdown-content pre { background: #1e1e2c; color: #e0e0e0; padding: 16px; border-radius: 8px; overflow-x: auto; margin: 12px 0; }
+    .markdown-content pre code { background: none; color: inherit; padding: 0; }
+    .markdown-content blockquote { border-left: 4px solid var(--primary); padding-left: 16px; color: #606266; margin: 12px 0; }
+    .markdown-content table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+    .markdown-content th, .markdown-content td { border: 1px solid #ebeef5; padding: 8px 12px; text-align: left; }
+    .markdown-content th { background: #f5f7fa; font-weight: 600; }
+
+    /* Skeleton loading */
+    .skeleton-card { height: 120px; background: linear-gradient(90deg, #f2f3f5 25%, #e6e8eb 50%, #f2f3f5 75%); background-size: 200% 100%; animation: skeleton-loading 1.5s infinite; border-radius: 12px; }
+    @keyframes skeleton-loading { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+    /* Custom scrollbar */
+    .content-area::-webkit-scrollbar { width: 6px; }
+    .content-area::-webkit-scrollbar-thumb { background: #c0c4cc; border-radius: 3px; }
+    .content-area::-webkit-scrollbar-track { background: transparent; }
+
+    /* Drawer / Dialog beautification */
+    .el-drawer__body { padding: 20px; }
+    .detail-section { margin-bottom: 20px; }
+    .detail-section h4 { font-size: 14px; color: #909399; margin-bottom: 8px; font-weight: 500; }
+    .detail-section .detail-value { font-size: 15px; font-weight: 500; }
+
+    /* Type badges colors */
+    .type-tag-官转 { background: rgba(64,158,255,0.1); color: #409EFF; border-color: rgba(64,158,255,0.2); }
+    .type-tag-逆向 { background: rgba(230,162,60,0.1); color: #e6a23c; border-color: rgba(230,162,60,0.2); }
+    .type-tag-聚合 { background: rgba(103,194,58,0.1); color: #67c23a; border-color: rgba(103,194,58,0.2); }
+    .type-tag-Bedrock { background: rgba(144,114,255,0.1); color: #9072ff; border-color: rgba(144,114,255,0.2); }
+
+    /* Global loading overlay */
+    .global-loading {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(255,255,255,0.9); display: flex; align-items: center;
+      justify-content: center; z-index: 9999; flex-direction: column; gap: 16px;
+    }
+    .global-loading span { color: #909399; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <!-- Global loading -->
+    <div v-if="initializing" class="global-loading">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none">
+        <circle cx="12" cy="12" r="10" stroke="#409EFF" stroke-width="3" stroke-dasharray="31.4 31.4" stroke-linecap="round">
+          <animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="1s" repeatCount="indefinite"/>
+        </circle>
+      </svg>
+      <span>系统加载中...</span>
+    </div>
+
+    <div v-else class="app-container">
+      <!-- Sidebar -->
+      <div class="sidebar" :class="{ collapsed: sidebarCollapsed }">
+        <div class="sidebar-logo">
+          <svg viewBox="0 0 24 24" fill="none">
+            <rect x="2" y="2" width="20" height="20" rx="4" fill="#409EFF"/>
+            <path d="M7 12h10M12 7v10" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+            <circle cx="12" cy="12" r="3" stroke="#fff" stroke-width="1.5" fill="none"/>
+          </svg>
+          <span>API 监控</span>
+        </div>
+        <div class="sidebar-nav">
+          <div v-for="item in navItems" :key="item.key"
+               class="sidebar-item" :class="{ active: currentPage === item.key }"
+               @click="navigateTo(item.key)">
+            <el-icon><component :is="item.icon" /></el-icon>
+            <span class="sidebar-label">{{ item.label }}</span>
+          </div>
+        </div>
+        <div style="padding: 12px 8px; border-top: 1px solid rgba(255,255,255,0.06);">
+          <div class="sidebar-item" @click="sidebarCollapsed = !sidebarCollapsed">
+            <el-icon><component :is="sidebarCollapsed ? 'Expand' : 'Fold'" /></el-icon>
+            <span class="sidebar-label">{{ sidebarCollapsed ? '展开' : '收起' }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Main Area -->
+      <div class="main-area">
+        <!-- Header -->
+        <div class="header-bar">
+          <div class="header-left">
+            <el-icon style="font-size:18px;cursor:pointer" @click="sidebarCollapsed = !sidebarCollapsed"><component :is="sidebarCollapsed ? 'Expand' : 'Fold'" /></el-icon>
+            <span class="header-title">{{ currentNavLabel }}</span>
+          </div>
+          <div class="header-right">
+            <el-tooltip content="刷新数据" placement="bottom">
+              <el-button :icon="Refresh" circle size="small" @click="refreshCurrentPage" />
+            </el-tooltip>
+            <el-badge :value="unreadAlerts" :hidden="unreadAlerts === 0" :max="99">
+              <el-button :icon="Bell" circle size="small" @click="navigateTo('analysis')" />
+            </el-badge>
+            <el-button :icon="Setting" circle size="small" @click="navigateTo('settings')" />
+          </div>
+        </div>
+
+        <!-- Content -->
+        <div class="content-area">
+          <transition name="fade" mode="out-in">
+
+            <!-- ========== Dashboard ========== -->
+            <div v-if="currentPage === 'dashboard'" key="dashboard">
+              <!-- Stat Cards -->
+              <div class="stat-cards">
+                <div class="stat-card total">
+                  <div class="stat-icon"><el-icon><Monitor /></el-icon></div>
+                  <div class="stat-value">{{ dashboardStats.total_sites || 0 }}</div>
+                  <div class="stat-label">总站点数</div>
+                  <div class="stat-bg"></div>
+                </div>
+                <div class="stat-card active">
+                  <div class="stat-icon"><el-icon><CircleCheck /></el-icon></div>
+                  <div class="stat-value">{{ dashboardStats.active_sites || 0 }}</div>
+                  <div class="stat-label">活跃站点</div>
+                  <div class="stat-bg"></div>
+                </div>
+                <div class="stat-card score">
+                  <div class="stat-icon"><el-icon><Star /></el-icon></div>
+                  <div class="stat-value">{{ dashboardStats.avg_score?.toFixed(1) || '0.0' }}</div>
+                  <div class="stat-label">平均评分</div>
+                  <div class="stat-bg"></div>
+                </div>
+                <div class="stat-card risk">
+                  <div class="stat-icon"><el-icon><WarningFilled /></el-icon></div>
+                  <div class="stat-value">{{ dashboardStats.risk_count || 0 }}</div>
+                  <div class="stat-label">风险预警</div>
+                  <div class="stat-bg"></div>
+                </div>
+              </div>
+
+              <!-- Quick Actions -->
+              <div class="quick-actions">
+                <button class="quick-action-btn crawl" @click="triggerCrawl('all')">
+                  <el-icon class="action-icon"><Download /></el-icon>
+                  <div><div>立即爬取</div><div style="font-size:11px;opacity:0.8">采集最新站点数据</div></div>
+                </button>
+                <button class="quick-action-btn analyze" @click="runAnalysis">
+                  <el-icon class="action-icon"><DataAnalysis /></el-icon>
+                  <div><div>运行分析</div><div style="font-size:11px;opacity:0.8">LLM 智能评估站点</div></div>
+                </button>
+                <button class="quick-action-btn report" @click="runAnalysis">
+                  <el-icon class="action-icon"><Document /></el-icon>
+                  <div><div>生成报告</div><div style="font-size:11px;opacity:0.8">汇总监控分析报告</div></div>
+                </button>
+              </div>
+
+              <!-- Top Picks & Risk Alerts -->
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+                <!-- Top Picks -->
+                <div class="section-card">
+                  <div class="section-title">
+                    <span><el-icon><Trophy /></el-icon> TOP 3 推荐</span>
+                  </div>
+                  <div v-if="loading.dashboard" style="display:flex;flex-direction:column;gap:12px;">
+                    <div class="skeleton-card" style="height:80px" v-for="i in 3" :key="i"></div>
+                  </div>
+                  <div v-else-if="topPicks.length === 0" style="text-align:center;padding:40px;color:#909399;">
+                    <el-icon style="font-size:40px;margin-bottom:8px"><Trophy /></el-icon>
+                    <p>暂无推荐数据</p>
+                  </div>
+                  <div v-else>
+                    <div v-for="(pick, idx) in topPicks" :key="pick.id" class="pick-card" style="margin-bottom:12px;" @click="viewSiteDetail(pick.id)">
+                      <div class="pick-header">
+                        <div class="pick-name">
+                          <span style="color:#909399;margin-right:6px">#{{ idx + 1 }}</span>{{ pick.name }}
+                          <el-tag size="small" :class="'type-tag-' + pick.relay_type" style="margin-left:8px">{{ pick.relay_type }}</el-tag>
+                        </div>
+                        <div class="pick-score" :style="{ color: scoreColor(pick.overall_score) }">{{ pick.overall_score?.toFixed(1) }}</div>
+                      </div>
+                      <div class="pick-meta">
+                        <div>倍率: <b>{{ pick.price_multiplier || 'N/A' }}</b> &nbsp;|&nbsp; 稳定性: <b>{{ pick.stability_score?.toFixed(1) }}</b></div>
+                        <div>风险: <el-tag :type="riskTagType(pick.risk_level)" size="small">{{ riskLabel(pick.risk_level) }}</el-tag></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Risk Alerts -->
+                <div class="section-card">
+                  <div class="section-title">
+                    <span><el-icon><Warning /></el-icon> 风险预警</span>
+                  </div>
+                  <div v-if="loading.dashboard" style="display:flex;flex-direction:column;gap:12px;">
+                    <div class="skeleton-card" style="height:60px" v-for="i in 3" :key="i"></div>
+                  </div>
+                  <div v-else-if="riskAlerts.length === 0" style="text-align:center;padding:40px;color:#909399;">
+                    <el-icon style="font-size:40px;margin-bottom:8px"><SuccessFilled /></el-icon>
+                    <p>暂无风险预警</p>
+                  </div>
+                  <div v-else class="risk-timeline">
+                    <el-timeline>
+                      <el-timeline-item v-for="alert in riskAlerts.slice(0, 8)" :key="alert.id"
+                        :timestamp="alert.time || alert.created_at" placement="top"
+                        :type="alert.level === 'high' ? 'danger' : alert.level === 'medium' ? 'warning' : 'success'">
+                        <div style="font-size:14px;font-weight:500;">{{ alert.title || alert.name }}</div>
+                        <div style="font-size:12px;color:#909399;margin-top:4px;">{{ alert.description || alert.risk_notes }}</div>
+                      </el-timeline-item>
+                    </el-timeline>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Recent Activity -->
+              <div class="section-card">
+                <div class="section-title"><span><el-icon><Clock /></el-icon> 最近活动</span></div>
+                <div v-if="recentActivity.length === 0" style="text-align:center;padding:30px;color:#909399;">
+                  <p>暂无活动记录</p>
+                </div>
+                <div v-else>
+                  <div v-for="act in recentActivity" :key="act.id" class="activity-item">
+                    <div class="activity-dot" :style="{ background: act.color || '#409EFF' }"></div>
+                    <div style="flex:1">{{ act.message }}</div>
+                    <div style="color:#909399;font-size:12px;">{{ act.time }}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- ========== Relay Sites ========== -->
+            <div v-if="currentPage === 'sites'" key="sites">
+              <div class="section-card">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
+                  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                    <el-input v-model="sitesFilters.keyword" placeholder="搜索站点名称/URL" clearable style="width:220px"
+                      :prefix-icon="Search" @keyup.enter="loadSites" />
+                    <el-select v-model="sitesFilters.type" placeholder="类型" clearable style="width:120px" @change="loadSites">
+                      <el-option label="官转" value="官转" /><el-option label="逆向" value="逆向" />
+                      <el-option label="聚合" value="聚合" /><el-option label="Bedrock" value="Bedrock" />
+                    </el-select>
+                    <el-select v-model="sitesFilters.status" placeholder="状态" clearable style="width:120px" @change="loadSites">
+                      <el-option label="活跃" value="active" /><el-option label="已暂停" value="suspended" />
+                      <el-option label="未知" value="unknown" />
+                    </el-select>
+                    <el-select v-model="sitesFilters.risk_level" placeholder="风险等级" clearable style="width:120px" @change="loadSites">
+                      <el-option label="低风险" value="low" /><el-option label="中风险" value="medium" />
+                      <el-option label="高风险" value="high" />
+                    </el-select>
+                    <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:#909399;">
+                      <span>最低评分</span>
+                      <el-slider v-model="sitesFilters.min_score" :min="0" :max="10" :step="0.5"
+                        style="width:120px" @change="loadSites" />
+                      <span>{{ sitesFilters.min_score }}</span>
+                    </div>
+                  </div>
+                  <el-button type="primary" @click="openSiteDialog(null)">
+                    <el-icon><Plus /></el-icon> 添加站点
+                  </el-button>
+                </div>
+
+                <el-table :data="sitesData" v-loading="loading.sites" stripe @sort-change="handleSitesSortChange"
+                  style="width:100%" @row-click="(row) => viewSiteDetail(row.id)">
+                  <el-table-column prop="name" label="名称" min-width="160" sortable="custom">
+                    <template #default="{ row }">
+                      <div style="font-weight:500;">{{ row.name }}</div>
+                      <div style="font-size:12px;color:#909399;">{{ row.url }}</div>
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="relay_type" label="类型" width="100" align="center">
+                    <template #default="{ row }">
+                      <el-tag :class="'type-tag-' + row.relay_type" size="small">{{ row.relay_type }}</el-tag>
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="price_multiplier" label="倍率" width="80" align="center" sortable="custom">
+                    <template #default="{ row }">
+                      <b>{{ row.price_multiplier || '-' }}</b>
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="overall_score" label="综合评分" width="180" sortable="custom">
+                    <template #default="{ row }">
+                      <div style="display:flex;align-items:center;gap:8px;">
+                        <el-progress :percentage="(row.overall_score || 0) * 10" :stroke-width="8"
+                          :color="scoreColor(row.overall_score)" style="flex:1" :show-text="false" />
+                        <span :style="{ color: scoreColor(row.overall_score), fontWeight: 600, fontSize: '13px' }">
+                          {{ row.overall_score?.toFixed(1) || '0.0' }}
+                        </span>
+                      </div>
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="risk_level" label="风险等级" width="100" align="center">
+                    <template #default="{ row }">
+                      <el-tag :type="riskTagType(row.risk_level)" size="small" effect="dark">{{ riskLabel(row.risk_level) }}</el-tag>
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="status" label="状态" width="90" align="center">
+                    <template #default="{ row }">
+                      <el-tag :type="statusTagType(row.status)" size="small" effect="plain">{{ statusLabel(row.status) }}</el-tag>
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="last_verified" label="最后验证" width="160" sortable="custom">
+                    <template #default="{ row }">{{ formatTime(row.last_verified) }}</template>
+                  </el-table-column>
+                  <el-table-column label="操作" width="140" align="center" fixed="right">
+                    <template #default="{ row }">
+                      <el-button link type="primary" size="small" @click.stop="openSiteDialog(row)">编辑</el-button>
+                      <el-popconfirm title="确认删除该站点?" @confirm="deleteSite(row.id)">
+                        <template #reference>
+                          <el-button link type="danger" size="small" @click.stop>删除</el-button>
+                        </template>
+                      </el-popconfirm>
+                    </template>
+                  </el-table-column>
+                </el-table>
+
+                <div style="display:flex;justify-content:flex-end;margin-top:16px;">
+                  <el-pagination background layout="total, prev, pager, next, sizes"
+                    :total="sitesTotal" :page-size="sitesPagination.page_size"
+                    :current-page="sitesPagination.page"
+                    @current-change="(p) => { sitesPagination.page = p; loadSites(); }"
+                    @size-change="(s) => { sitesPagination.page_size = s; sitesPagination.page = 1; loadSites(); }"
+                    :page-sizes="[10, 20, 50]" />
+                </div>
+              </div>
+            </div>
+
+            <!-- ========== Crawl Center ========== -->
+            <div v-if="currentPage === 'crawl'" key="crawl">
+              <div class="section-card">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                  <el-tabs v-model="crawlFilters.source" @tab-change="loadCrawlResults">
+                    <el-tab-pane label="全部" name="all" />
+                    <el-tab-pane label="linux.do" name="linux_do" />
+                    <el-tab-pane label="V2EX" name="v2ex" />
+                    <el-tab-pane label="GitHub" name="github" />
+                    <el-tab-pane label="RSS" name="rss" />
+                  </el-tabs>
+                  <div style="display:flex;gap:8px;">
+                    <el-select v-model="crawlTriggerSource" style="width:140px" placeholder="选择来源">
+                      <el-option label="全部来源" value="all" /><el-option label="linux.do" value="linux_do" />
+                      <el-option label="V2EX" value="v2ex" /><el-option label="GitHub" value="github" />
+                      <el-option label="RSS" value="rss" />
+                    </el-select>
+                    <el-button type="primary" :loading="loading.crawlTrigger" @click="triggerCrawl(crawlTriggerSource)">
+                      <el-icon><Download /></el-icon> 开始采集
+                    </el-button>
+                  </div>
+                </div>
+
+                <el-table :data="crawlResults" v-loading="loading.crawl" stripe style="width:100%">
+                  <el-table-column prop="source" label="来源" width="110" align="center">
+                    <template #default="{ row }">
+                      <el-tag size="small" effect="plain">{{ sourceLabel(row.source) }}</el-tag>
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="title" label="标题" min-width="200">
+                    <template #default="{ row }">
+                      <div style="font-weight:500;cursor:pointer;" @click="viewCrawlDetail(row)">{{ row.title }}</div>
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="content" label="内容摘要" min-width="280">
+                    <template #default="{ row }">
+                      <span style="color:#606266;">{{ (row.content || '').substring(0, 100) }}{{ (row.content || '').length > 100 ? '...' : '' }}</span>
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="processed" label="已处理" width="90" align="center">
+                    <template #default="{ row }">
+                      <el-tag :type="row.processed ? 'success' : 'info'" size="small">{{ row.processed ? '是' : '否' }}</el-tag>
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="crawled_at" label="爬取时间" width="160">
+                    <template #default="{ row }">{{ formatTime(row.crawled_at || row.created_at) }}</template>
+                  </el-table-column>
+                  <el-table-column label="操作" width="120" align="center">
+                    <template #default="{ row }">
+                      <el-button link type="primary" size="small" @click="viewCrawlDetail(row)">查看</el-button>
+                      <el-button v-if="!row.processed" link type="success" size="small" @click="markProcessed(row)">处理</el-button>
+                    </template>
+                  </el-table-column>
+                </el-table>
+
+                <div style="display:flex;justify-content:flex-end;margin-top:16px;">
+                  <el-pagination background layout="total, prev, pager, next"
+                    :total="crawlTotal" :page-size="crawlPagination.page_size"
+                    :current-page="crawlPagination.page"
+                    @current-change="(p) => { crawlPagination.page = p; loadCrawlResults(); }" />
+                </div>
+              </div>
+            </div>
+
+            <!-- ========== Analysis ========== -->
+            <div v-if="currentPage === 'analysis'" key="analysis">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+                <!-- Reports list -->
+                <div class="section-card">
+                  <div class="section-title">
+                    <span><el-icon><Document /></el-icon> 分析报告</span>
+                    <el-button type="primary" size="small" :loading="loading.analysisRun" @click="runAnalysis">
+                      <el-icon><DataAnalysis /></el-icon> 运行分析
+                    </el-button>
+                  </div>
+                  <el-tabs v-model="analysisFilter" @tab-change="loadReports">
+                    <el-tab-pane label="全部" name="all" />
+                    <el-tab-pane label="日报" name="daily" />
+                    <el-tab-pane label="周报" name="weekly" />
+                    <el-tab-pane label="预警" name="alert" />
+                  </el-tabs>
+                  <div v-if="loading.reports" style="display:flex;flex-direction:column;gap:12px;">
+                    <div class="skeleton-card" style="height:60px" v-for="i in 4" :key="i"></div>
+                  </div>
+                  <div v-else-if="reports.length === 0" style="text-align:center;padding:40px;color:#909399;">
+                    <el-icon style="font-size:36px;margin-bottom:8px"><Document /></el-icon>
+                    <p>暂无报告</p>
+                  </div>
+                  <div v-else>
+                    <div v-for="report in reports" :key="report.id"
+                      style="padding:14px;border:1px solid #ebeef5;border-radius:8px;margin-bottom:8px;cursor:pointer;transition:all 0.2s;"
+                      :style="{ borderColor: selectedReport?.id === report.id ? '#409EFF' : '', background: selectedReport?.id === report.id ? '#f0f7ff' : '' }"
+                      @click="selectReport(report)">
+                      <div style="display:flex;justify-content:space-between;align-items:center;">
+                        <div>
+                          <el-tag :type="report.report_type === 'daily' ? '' : report.report_type === 'weekly' ? 'success' : 'danger'" size="small" style="margin-right:8px;">
+                            {{ report.report_type === 'daily' ? '日报' : report.report_type === 'weekly' ? '周报' : '预警' }}
+                          </el-tag>
+                          <span style="font-weight:500;">{{ report.summary || report.title || '分析报告' }}</span>
+                        </div>
+                        <span style="font-size:12px;color:#909399;">{{ formatTime(report.created_at) }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Report detail -->
+                <div class="section-card">
+                  <div class="section-title">
+                    <span><el-icon><View /></el-icon> 报告详情</span>
+                  </div>
+                  <div v-if="!selectedReport" style="text-align:center;padding:60px;color:#909399;">
+                    <el-icon style="font-size:48px;margin-bottom:12px"><View /></el-icon>
+                    <p>请选择左侧报告查看详情</p>
+                  </div>
+                  <div v-else>
+                    <div style="margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid #ebeef5;">
+                      <div style="font-size:18px;font-weight:600;">{{ selectedReport.summary || selectedReport.title }}</div>
+                      <div style="font-size:13px;color:#909399;margin-top:4px;">{{ formatTime(selectedReport.created_at) }}</div>
+                    </div>
+                    <div v-if="selectedReport.top_picks" style="margin-bottom:16px;">
+                      <strong>推荐站点:</strong>
+                      <el-tag v-for="p in (selectedReport.top_picks || [])" :key="p" size="small" style="margin:4px;">{{ p }}</el-tag>
+                    </div>
+                    <div class="markdown-content" v-html="renderMarkdown(selectedReport.content || '')"></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Evaluate Site -->
+              <div class="section-card" style="margin-top:20px;">
+                <div class="section-title"><span><el-icon><Cpu /></el-icon> 智能评估站点</span></div>
+                <div style="display:flex;gap:12px;align-items:center;">
+                  <el-input v-model="evaluateUrl" placeholder="输入站点 URL 进行 LLM 智能评估" style="flex:1;" clearable />
+                  <el-button type="primary" :loading="loading.evaluate" @click="evaluateSite">
+                    <el-icon><Cpu /></el-icon> 开始评估
+                  </el-button>
+                </div>
+                <div v-if="evaluateResult" style="margin-top:20px;">
+                  <el-descriptions :column="2" border>
+                    <el-descriptions-item label="站点名称">{{ evaluateResult.name || '-' }}</el-descriptions-item>
+                    <el-descriptions-item label="类型">{{ evaluateResult.relay_type || '-' }}</el-descriptions-item>
+                    <el-descriptions-item label="综合评分">
+                      <span :style="{ color: scoreColor(evaluateResult.overall_score), fontWeight: 600 }">
+                        {{ evaluateResult.overall_score?.toFixed(1) || '-' }}
+                      </span>
+                    </el-descriptions-item>
+                    <el-descriptions-item label="风险等级">
+                      <el-tag :type="riskTagType(evaluateResult.risk_level)" size="small">{{ riskLabel(evaluateResult.risk_level) }}</el-tag>
+                    </el-descriptions-item>
+                  </el-descriptions>
+                  <div v-if="evaluateResult.analysis" class="markdown-content" style="margin-top:16px;" v-html="renderMarkdown(evaluateResult.analysis)"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- ========== Settings ========== -->
+            <div v-if="currentPage === 'settings'" key="settings">
+              <div style="max-width:700px;">
+                <!-- LLM Config -->
+                <div class="section-card">
+                  <div class="section-title"><span><el-icon><Cpu /></el-icon> LLM 配置</span></div>
+                  <el-form label-width="120px" label-position="top">
+                    <el-form-item label="API Key">
+                      <el-input v-model="settings.llm_api_key" type="password" show-password placeholder="sk-xxx..." />
+                    </el-form-item>
+                    <el-form-item label="API Base URL">
+                      <el-input v-model="settings.llm_api_base" placeholder="https://api.openai.com/v1" />
+                    </el-form-item>
+                    <el-form-item label="模型名称">
+                      <el-input v-model="settings.llm_model" placeholder="gpt-4o-mini" />
+                    </el-form-item>
+                  </el-form>
+                </div>
+
+                <!-- Telegram Config -->
+                <div class="section-card">
+                  <div class="section-title"><span><el-icon><ChatDotRound /></el-icon> Telegram 通知</span></div>
+                  <el-form label-width="120px" label-position="top">
+                    <el-form-item label="Bot Token">
+                      <el-input v-model="settings.telegram_bot_token" type="password" show-password placeholder="123456:ABC-DEF..." />
+                    </el-form-item>
+                    <el-form-item label="Chat ID">
+                      <el-input v-model="settings.telegram_chat_id" placeholder="-1001234567890" />
+                    </el-form-item>
+                  </el-form>
+                </div>
+
+                <!-- Crawl Config -->
+                <div class="section-card">
+                  <div class="section-title"><span><el-icon><Timer /></el-icon> 采集设置</span></div>
+                  <el-form label-width="120px" label-position="top">
+                    <el-form-item label="采集间隔 (分钟)">
+                      <el-input-number v-model="settings.crawl_interval" :min="5" :max="1440" :step="5" />
+                    </el-form-item>
+                    <el-form-item label="启用来源">
+                      <el-checkbox-group v-model="settings.enabled_sources">
+                        <el-checkbox label="linux_do">linux.do</el-checkbox>
+                        <el-checkbox label="v2ex">V2EX</el-checkbox>
+                        <el-checkbox label="github">GitHub</el-checkbox>
+                        <el-checkbox label="rss">RSS</el-checkbox>
+                      </el-checkbox-group>
+                    </el-form-item>
+                  </el-form>
+                </div>
+
+                <div style="display:flex;justify-content:flex-end;gap:12px;">
+                  <el-button @click="loadSettings">重置</el-button>
+                  <el-button type="primary" @click="saveSettings" :loading="loading.settings">
+                    <el-icon><Check /></el-icon> 保存设置
+                  </el-button>
+                </div>
+              </div>
+            </div>
+
+          </transition>
+        </div>
+      </div>
+    </div>
+
+    <!-- Site Add/Edit Dialog -->
+    <el-dialog v-model="siteDialogVisible" :title="editingSite ? '编辑站点' : '添加站点'" width="600px" destroy-on-close>
+      <el-form :model="siteForm" label-width="100px" label-position="top">
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="名称" required>
+              <el-input v-model="siteForm.name" placeholder="站点名称" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="类型" required>
+              <el-select v-model="siteForm.relay_type" style="width:100%">
+                <el-option label="官转" value="官转" /><el-option label="逆向" value="逆向" />
+                <el-option label="聚合" value="聚合" /><el-option label="Bedrock" value="Bedrock" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-form-item label="站点 URL" required>
+          <el-input v-model="siteForm.url" placeholder="https://example.com" />
+        </el-form-item>
+        <el-form-item label="API URL">
+          <el-input v-model="siteForm.api_url" placeholder="https://api.example.com/v1" />
+        </el-form-item>
+        <el-row :gutter="16">
+          <el-col :span="8">
+            <el-form-item label="倍率">
+              <el-input-number v-model="siteForm.price_multiplier" :min="0" :step="0.1" :precision="2" style="width:100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="状态">
+              <el-select v-model="siteForm.status" style="width:100%">
+                <el-option label="活跃" value="active" /><el-option label="已暂停" value="suspended" />
+                <el-option label="未知" value="unknown" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="风险等级">
+              <el-select v-model="siteForm.risk_level" style="width:100%">
+                <el-option label="低" value="low" /><el-option label="中" value="medium" />
+                <el-option label="高" value="high" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-form-item label="支持的模型">
+          <el-input v-model="siteForm.supported_models_str" placeholder="模型列表，逗号分隔" />
+        </el-form-item>
+        <el-form-item label="价格信息">
+          <el-input v-model="siteForm.pricing_info" type="textarea" :rows="3" placeholder="价格信息详情" />
+        </el-form-item>
+        <el-form-item label="风险备注">
+          <el-input v-model="siteForm.risk_notes" type="textarea" :rows="2" placeholder="风险相关备注" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="siteDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="saveSite" :loading="loading.siteSave">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- Site Detail Drawer -->
+    <el-drawer v-model="siteDetailVisible" :title="siteDetail?.name || '站点详情'" size="480px" direction="rtl">
+      <div v-if="siteDetail">
+        <div class="detail-section">
+          <h4>基本信息</h4>
+          <el-descriptions :column="1" border size="small">
+            <el-descriptions-item label="名称">{{ siteDetail.name }}</el-descriptions-item>
+            <el-descriptions-item label="URL">
+              <a :href="siteDetail.url" target="_blank" style="color:#409EFF;">{{ siteDetail.url }}</a>
+            </el-descriptions-item>
+            <el-descriptions-item label="API URL">
+              <a v-if="siteDetail.api_url" :href="siteDetail.api_url" target="_blank" style="color:#409EFF;">{{ siteDetail.api_url }}</a>
+              <span v-else>-</span>
+            </el-descriptions-item>
+            <el-descriptions-item label="类型">
+              <el-tag :class="'type-tag-' + siteDetail.relay_type">{{ siteDetail.relay_type }}</el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item label="状态">
+              <el-tag :type="statusTagType(siteDetail.status)">{{ statusLabel(siteDetail.status) }}</el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item label="倍率">{{ siteDetail.price_multiplier || '-' }}</el-descriptions-item>
+          </el-descriptions>
+        </div>
+        <div class="detail-section">
+          <h4>评分详情</h4>
+          <div style="display:flex;flex-direction:column;gap:10px;margin-top:8px;">
+            <div style="display:flex;align-items:center;gap:8px;" v-for="item in scoreItems" :key="item.key">
+              <span style="width:80px;font-size:13px;color:#909399;">{{ item.label }}</span>
+              <el-progress :percentage="(siteDetail[item.key] || 0) * 10" :stroke-width="6"
+                :color="scoreColor(siteDetail[item.key])" style="flex:1" :show-text="false" />
+              <span :style="{ color: scoreColor(siteDetail[item.key]), fontWeight: 600, fontSize: '13px', width: '32px' }">
+                {{ siteDetail[item.key]?.toFixed(1) || '0.0' }}
+              </span>
+            </div>
+          </div>
+        </div>
+        <div class="detail-section">
+          <h4>风险信息</h4>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
+            <span style="font-size:13px;color:#909399;">风险等级:</span>
+            <el-tag :type="riskTagType(siteDetail.risk_level)" effect="dark">{{ riskLabel(siteDetail.risk_level) }}</el-tag>
+          </div>
+          <div v-if="siteDetail.risk_notes" style="margin-top:8px;font-size:13px;color:#606266;">{{ siteDetail.risk_notes }}</div>
+        </div>
+        <div v-if="siteDetail.supported_models && siteDetail.supported_models.length" class="detail-section">
+          <h4>支持模型</h4>
+          <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:8px;">
+            <el-tag v-for="m in siteDetail.supported_models" :key="m" size="small" effect="plain" style="margin:2px;">{{ m }}</el-tag>
+          </div>
+        </div>
+        <div v-if="siteDetail.pricing_info" class="detail-section">
+          <h4>价格信息</h4>
+          <div class="markdown-content" style="margin-top:8px;" v-html="renderMarkdown(siteDetail.pricing_info)"></div>
+        </div>
+        <div style="margin-top:16px;display:flex;gap:8px;">
+          <el-button type="primary" @click="openSiteDialog(siteDetail); siteDetailVisible = false;">编辑</el-button>
+          <el-button @click="siteDetailVisible = false">关闭</el-button>
+        </div>
+      </div>
+    </el-drawer>
+
+    <!-- Crawl Detail Dialog -->
+    <el-dialog v-model="crawlDetailVisible" :title="crawlDetail?.title || '爬取详情'" width="700px">
+      <div v-if="crawlDetail">
+        <el-descriptions :column="2" border size="small" style="margin-bottom:16px;">
+          <el-descriptions-item label="来源">{{ sourceLabel(crawlDetail.source) }}</el-descriptions-item>
+          <el-descriptions-item label="爬取时间">{{ formatTime(crawlDetail.crawled_at || crawlDetail.created_at) }}</el-descriptions-item>
+          <el-descriptions-item label="来源链接" :span="2">
+            <a v-if="crawlDetail.source_url" :href="crawlDetail.source_url" target="_blank" style="color:#409EFF;">{{ crawlDetail.source_url }}</a>
+            <span v-else>-</span>
+          </el-descriptions-item>
+        </el-descriptions>
+        <div style="max-height:400px;overflow-y:auto;line-height:1.8;white-space:pre-wrap;font-size:14px;color:#303133;">{{ crawlDetail.content }}</div>
+      </div>
+    </el-dialog>
+  </div>
+
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script src="https://unpkg.com/element-plus"></script>
+  <script src="https://unpkg.com/@element-plus/icons-vue"></script>
+  <script src="https://cdn.jsdelivr.net/npm/markdown-it/dist/markdown-it.min.js"></script>
+  <script>
+    const { createApp, ref, reactive, computed, onMounted, onUnmounted, watch, shallowRef } = Vue;
+    const { ElMessage, ElMessageBox } = ElementPlus;
+    const md = window.markdownit({ html: false, linkify: true, breaks: true });
+
+    const API_BASE = '';
+
+    async function api(path, options = {}) {
+      try {
+        const resp = await fetch(API_BASE + path, {
+          headers: { 'Content-Type': 'application/json', ...options.headers },
+          ...options,
+        });
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({ detail: resp.statusText }));
+          throw new Error(err.detail || err.message || `HTTP ${resp.status}`);
+        }
+        if (resp.status === 204) return null;
+        return await resp.json();
+      } catch (e) {
+        console.error(`API Error [${path}]:`, e);
+        throw e;
+      }
+    }
+
+    const app = createApp({
+      setup() {
+        // --- State ---
+        const initializing = ref(true);
+        const sidebarCollapsed = ref(false);
+        const currentPage = ref('dashboard');
+        const loading = reactive({
+          dashboard: false, sites: false, crawl: false, crawlTrigger: false,
+          reports: false, analysisRun: false, evaluate: false, settings: false, siteSave: false,
+        });
+
+        // Icons (for template binding)
+        const Refresh = ElementPlusIconsVue.Refresh;
+        const Bell = ElementPlusIconsVue.Bell;
+        const Setting = ElementPlusIconsVue.Setting;
+        const Search = ElementPlusIconsVue.Search;
+
+        const navItems = [
+          { key: 'dashboard', label: '仪表盘', icon: 'Odometer' },
+          { key: 'sites', label: '中转站列表', icon: 'Monitor' },
+          { key: 'crawl', label: '采集中心', icon: 'Download' },
+          { key: 'analysis', label: '智能分析', icon: 'DataAnalysis' },
+          { key: 'settings', label: '系统设置', icon: 'Setting' },
+        ];
+
+        const currentNavLabel = computed(() => {
+          const item = navItems.find(n => n.key === currentPage.value);
+          return item ? item.label : '';
+        });
+
+        const unreadAlerts = ref(0);
+
+        // --- Dashboard ---
+        const dashboardStats = ref({});
+        const topPicks = ref([]);
+        const riskAlerts = ref([]);
+        const recentActivity = ref([]);
+
+        async function loadDashboard() {
+          loading.dashboard = true;
+          try {
+            const [stats, picks, alerts] = await Promise.allSettled([
+              api('/api/dashboard/stats'),
+              api('/api/dashboard/top-picks'),
+              api('/api/dashboard/risk-alerts'),
+            ]);
+            if (stats.status === 'fulfilled') dashboardStats.value = stats.value || {};
+            if (picks.status === 'fulfilled') topPicks.value = picks.value || [];
+            if (alerts.status === 'fulfilled') {
+              riskAlerts.value = alerts.value || [];
+              unreadAlerts.value = riskAlerts.value.filter(a => !a.read).length;
+            }
+            // Build activity from recent data
+            const activities = [];
+            (topPicks.value.slice(0, 3)).forEach(p => {
+              activities.push({ id: 'p-' + p.id, message: `推荐站点: ${p.name} (评分: ${p.overall_score?.toFixed(1)})`, color: '#67c23a', time: formatTime(p.updated_at || p.created_at) });
+            });
+            (riskAlerts.value.slice(0, 3)).forEach(a => {
+              activities.push({ id: 'a-' + a.id, message: a.title || a.name || '风险预警', color: '#f56c6c', time: formatTime(a.time || a.created_at) });
+            });
+            recentActivity.value = activities;
+          } catch (e) {
+            ElMessage.error('加载仪表盘失败: ' + e.message);
+          } finally {
+            loading.dashboard = false;
+          }
+        }
+
+        // --- Sites ---
+        const sitesData = ref([]);
+        const sitesTotal = ref(0);
+        const sitesFilters = reactive({ keyword: '', type: '', status: '', risk_level: '', min_score: 0 });
+        const sitesPagination = reactive({ page: 1, page_size: 10 });
+        const sitesSort = reactive({ sort_by: 'overall_score', sort_order: 'desc' });
+
+        async function loadSites() {
+          loading.sites = true;
+          try {
+            const params = new URLSearchParams({
+              page: sitesPagination.page,
+              page_size: sitesPagination.page_size,
+              sort_by: sitesSort.sort_by,
+              sort_order: sitesSort.sort_order,
+            });
+            if (sitesFilters.type) params.set('type', sitesFilters.type);
+            if (sitesFilters.status) params.set('status', sitesFilters.status);
+            if (sitesFilters.risk_level) params.set('risk_level', sitesFilters.risk_level);
+            if (sitesFilters.min_score > 0) params.set('min_score', sitesFilters.min_score);
+            if (sitesFilters.keyword) params.set('keyword', sitesFilters.keyword);
+            const data = await api('/api/sites?' + params.toString());
+            sitesData.value = data.items || data || [];
+            sitesTotal.value = data.total || sitesData.value.length;
+          } catch (e) {
+            ElMessage.error('加载站点列表失败: ' + e.message);
+          } finally {
+            loading.sites = false;
+          }
+        }
+
+        function handleSitesSortChange({ prop, order }) {
+          if (prop) {
+            sitesSort.sort_by = prop;
+            sitesSort.sort_order = order === 'ascending' ? 'asc' : 'desc';
+          }
+          loadSites();
+        }
+
+        // Site dialog
+        const siteDialogVisible = ref(false);
+        const editingSite = ref(null);
+        const siteForm = reactive({
+          name: '', url: '', api_url: '', relay_type: '官转', status: 'active',
+          price_multiplier: 1, pricing_info: '', supported_models_str: '', risk_level: 'low', risk_notes: '',
+        });
+
+        function openSiteDialog(site) {
+          editingSite.value = site;
+          if (site) {
+            Object.assign(siteForm, {
+              name: site.name || '', url: site.url || '', api_url: site.api_url || '',
+              relay_type: site.relay_type || '官转', status: site.status || 'active',
+              price_multiplier: site.price_multiplier || 1, pricing_info: site.pricing_info || '',
+              supported_models_str: (site.supported_models || []).join(', '),
+              risk_level: site.risk_level || 'low', risk_notes: site.risk_notes || '',
+            });
+          } else {
+            Object.assign(siteForm, {
+              name: '', url: '', api_url: '', relay_type: '官转', status: 'active',
+              price_multiplier: 1, pricing_info: '', supported_models_str: '', risk_level: 'low', risk_notes: '',
+            });
+          }
+          siteDialogVisible.value = true;
+        }
+
+        async function saveSite() {
+          if (!siteForm.name || !siteForm.url) {
+            ElMessage.warning('请填写必填字段');
+            return;
+          }
+          loading.siteSave = true;
+          try {
+            const payload = { ...siteForm };
+            payload.supported_models = payload.supported_models_str ? payload.supported_models_str.split(',').map(s => s.trim()).filter(Boolean) : [];
+            delete payload.supported_models_str;
+            if (editingSite.value) {
+              await api('/api/sites/' + editingSite.value.id, { method: 'PUT', body: JSON.stringify(payload) });
+              ElMessage.success('站点更新成功');
+            } else {
+              await api('/api/sites', { method: 'POST', body: JSON.stringify(payload) });
+              ElMessage.success('站点添加成功');
+            }
+            siteDialogVisible.value = false;
+            loadSites();
+          } catch (e) {
+            ElMessage.error('保存失败: ' + e.message);
+          } finally {
+            loading.siteSave = false;
+          }
+        }
+
+        async function deleteSite(id) {
+          try {
+            await api('/api/sites/' + id, { method: 'DELETE' });
+            ElMessage.success('删除成功');
+            loadSites();
+          } catch (e) {
+            ElMessage.error('删除失败: ' + e.message);
+          }
+        }
+
+        // Site detail drawer
+        const siteDetailVisible = ref(false);
+        const siteDetail = ref(null);
+        const scoreItems = [
+          { key: 'overall_score', label: '综合评分' },
+          { key: 'stability_score', label: '稳定性' },
+          { key: 'price_score', label: '价格' },
+          { key: 'community_rating', label: '社区评价' },
+          { key: 'update_speed_score', label: '更新速度' },
+        ];
+
+        async function viewSiteDetail(id) {
+          try {
+            siteDetail.value = await api('/api/sites/' + id);
+            siteDetailVisible.value = true;
+          } catch (e) {
+            ElMessage.error('加载详情失败: ' + e.message);
+          }
+        }
+
+        // --- Crawl ---
+        const crawlResults = ref([]);
+        const crawlTotal = ref(0);
+        const crawlFilters = reactive({ source: 'all' });
+        const crawlPagination = reactive({ page: 1, page_size: 10 });
+        const crawlTriggerSource = ref('all');
+        const crawlDetailVisible = ref(false);
+        const crawlDetail = ref(null);
+
+        async function loadCrawlResults() {
+          loading.crawl = true;
+          try {
+            const params = new URLSearchParams({
+              page: crawlPagination.page,
+              page_size: crawlPagination.page_size,
+            });
+            if (crawlFilters.source && crawlFilters.source !== 'all') params.set('source', crawlFilters.source);
+            const data = await api('/api/crawl/results?' + params.toString());
+            crawlResults.value = data.items || data || [];
+            crawlTotal.value = data.total || crawlResults.value.length;
+          } catch (e) {
+            ElMessage.error('加载采集结果失败: ' + e.message);
+          } finally {
+            loading.crawl = false;
+          }
+        }
+
+        async function triggerCrawl(source) {
+          loading.crawlTrigger = true;
+          try {
+            await api('/api/crawl/trigger', { method: 'POST', body: JSON.stringify({ source: source || 'all' }) });
+            ElMessage.success('采集任务已触发');
+            if (currentPage.value === 'crawl') loadCrawlResults();
+          } catch (e) {
+            ElMessage.error('触发采集失败: ' + e.message);
+          } finally {
+            loading.crawlTrigger = false;
+          }
+        }
+
+        function viewCrawlDetail(row) {
+          crawlDetail.value = row;
+          crawlDetailVisible.value = true;
+        }
+
+        async function markProcessed(row) {
+          try {
+            await api('/api/crawl/results/' + row.id, { method: 'PUT', body: JSON.stringify({ processed: true }) });
+            row.processed = true;
+            ElMessage.success('已标记为已处理');
+          } catch (e) {
+            ElMessage.error('操作失败: ' + e.message);
+          }
+        }
+
+        function sourceLabel(s) {
+          const map = { linux_do: 'linux.do', v2ex: 'V2EX', github: 'GitHub', rss: 'RSS' };
+          return map[s] || s;
+        }
+
+        // --- Analysis ---
+        const reports = ref([]);
+        const analysisFilter = ref('all');
+        const selectedReport = ref(null);
+        const evaluateUrl = ref('');
+        const evaluateResult = ref(null);
+
+        async function loadReports() {
+          loading.reports = true;
+          try {
+            const params = new URLSearchParams();
+            if (analysisFilter.value && analysisFilter.value !== 'all') params.set('report_type', analysisFilter.value);
+            const data = await api('/api/analysis/reports?' + params.toString());
+            reports.value = data.items || data || [];
+            if (reports.value.length > 0 && (!selectedReport.value || !reports.value.find(r => r.id === selectedReport.value.id))) {
+              selectedReport.value = reports.value[0];
+            }
+          } catch (e) {
+            ElMessage.error('加载报告失败: ' + e.message);
+          } finally {
+            loading.reports = false;
+          }
+        }
+
+        function selectReport(report) { selectedReport.value = report; }
+
+        async function runAnalysis() {
+          loading.analysisRun = true;
+          try {
+            await api('/api/analysis/run', { method: 'POST' });
+            ElMessage.success('分析任务已启动');
+            loadReports();
+          } catch (e) {
+            ElMessage.error('运行分析失败: ' + e.message);
+          } finally {
+            loading.analysisRun = false;
+          }
+        }
+
+        async function evaluateSite() {
+          if (!evaluateUrl.value) { ElMessage.warning('请输入站点 URL'); return; }
+          loading.evaluate = true;
+          evaluateResult.value = null;
+          try {
+            evaluateResult.value = await api('/api/analysis/evaluate-site', {
+              method: 'POST', body: JSON.stringify({ url: evaluateUrl.value }),
+            });
+          } catch (e) {
+            ElMessage.error('评估失败: ' + e.message);
+          } finally {
+            loading.evaluate = false;
+          }
+        }
+
+        // --- Settings ---
+        const settings = reactive({
+          llm_api_key: '', llm_api_base: 'https://api.openai.com/v1', llm_model: 'gpt-4o-mini',
+          telegram_bot_token: '', telegram_chat_id: '',
+          crawl_interval: 60, enabled_sources: ['linux_do', 'v2ex', 'github', 'rss'],
+        });
+
+        function loadSettings() {
+          const saved = localStorage.getItem('api_relay_monitor_settings');
+          if (saved) {
+            try { Object.assign(settings, JSON.parse(saved)); } catch (e) {}
+          }
+        }
+
+        async function saveSettings() {
+          loading.settings = true;
+          try {
+            localStorage.setItem('api_relay_monitor_settings', JSON.stringify(settings));
+            try { await api('/api/config', { method: 'POST', body: JSON.stringify(settings) }); } catch (e) { /* backend may not exist yet */ }
+            ElMessage.success('设置已保存');
+          } finally {
+            loading.settings = false;
+          }
+        }
+
+        // --- Helpers ---
+        function scoreColor(score) {
+          if (!score) return '#909399';
+          if (score >= 8) return '#67c23a';
+          if (score >= 7) return '#85ce61';
+          if (score >= 5) return '#e6a23c';
+          return '#f56c6c';
+        }
+        function riskTagType(level) {
+          return level === 'high' ? 'danger' : level === 'medium' ? 'warning' : 'success';
+        }
+        function riskLabel(level) {
+          return level === 'high' ? '高风险' : level === 'medium' ? '中风险' : level === 'low' ? '低风险' : level || '-';
+        }
+        function statusTagType(s) {
+          return s === 'active' ? 'success' : s === 'suspended' ? 'danger' : 'info';
+        }
+        function statusLabel(s) {
+          return s === 'active' ? '活跃' : s === 'suspended' ? '已暂停' : s === 'unknown' ? '未知' : s || '-';
+        }
+        function formatTime(t) {
+          if (!t) return '-';
+          try {
+            const d = new Date(t);
+            if (isNaN(d.getTime())) return t;
+            return d.toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+          } catch { return t; }
+        }
+        function renderMarkdown(text) {
+          if (!text) return '';
+          return md.render(text);
+        }
+
+        // --- Navigation ---
+        function navigateTo(page) {
+          currentPage.value = page;
+          window.location.hash = page;
+        }
+
+        function refreshCurrentPage() {
+          if (currentPage.value === 'dashboard') loadDashboard();
+          else if (currentPage.value === 'sites') loadSites();
+          else if (currentPage.value === 'crawl') loadCrawlResults();
+          else if (currentPage.value === 'analysis') { loadReports(); }
+        }
+
+        // Hash routing
+        function handleHash() {
+          const hash = window.location.hash.replace('#', '');
+          if (hash && navItems.find(n => n.key === hash)) currentPage.value = hash;
+        }
+
+        // Auto refresh
+        let refreshTimer = null;
+
+        // --- Lifecycle ---
+        onMounted(async () => {
+          loadSettings();
+          handleHash();
+          window.addEventListener('hashchange', handleHash);
+
+          // Load initial data
+          await loadDashboard();
+
+          initializing.value = false;
+
+          // Auto refresh every 60s
+          refreshTimer = setInterval(() => {
+            if (currentPage.value === 'dashboard') loadDashboard();
+          }, 60000);
+        });
+
+        onUnmounted(() => {
+          window.removeEventListener('hashchange', handleHash);
+          if (refreshTimer) clearInterval(refreshTimer);
+        });
+
+        // Load data when page changes
+        watch(currentPage, (page) => {
+          if (page === 'dashboard') loadDashboard();
+          else if (page === 'sites') loadSites();
+          else if (page === 'crawl') loadCrawlResults();
+          else if (page === 'analysis') loadReports();
+        });
+
+        return {
+          initializing, sidebarCollapsed, currentPage, loading, navItems, currentNavLabel, unreadAlerts,
+          // Icons
+          Refresh, Bell, Setting, Search,
+          // Dashboard
+          dashboardStats, topPicks, riskAlerts, recentActivity,
+          // Sites
+          sitesData, sitesTotal, sitesFilters, sitesPagination, siteDialogVisible, editingSite, siteForm,
+          siteDetailVisible, siteDetail, scoreItems,
+          // Crawl
+          crawlResults, crawlTotal, crawlFilters, crawlPagination, crawlTriggerSource,
+          crawlDetailVisible, crawlDetail,
+          // Analysis
+          reports, analysisFilter, selectedReport, evaluateUrl, evaluateResult,
+          // Settings
+          settings,
+          // Methods
+          navigateTo, refreshCurrentPage, loadSites, handleSitesSortChange,
+          openSiteDialog, saveSite, deleteSite, viewSiteDetail,
+          loadCrawlResults, triggerCrawl, viewCrawlDetail, markProcessed, sourceLabel,
+          loadReports, selectReport, runAnalysis, evaluateSite,
+          loadSettings, saveSettings,
+          scoreColor, riskTagType, riskLabel, statusTagType, statusLabel, formatTime, renderMarkdown,
+        };
+      },
+    });
+
+    // Register Element Plus
+    app.use(ElementPlus);
+
+    // Register all icons as components
+    for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
+      app.component(key, component);
+    }
+
+    app.mount('#app');
+  </script>
+</body>
+</html>
