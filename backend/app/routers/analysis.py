@@ -3,14 +3,15 @@ API Relay Monitor - LLM 分析路由
 提供 LLM 分析和报告相关接口
 """
 
-from datetime import datetime
+import logging
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import get_db
+from app.database import get_db, async_session
 from app.models import CrawlResult, RelaySite, AnalysisReport
 from app.schemas import (
     AnalysisReportResponse,
@@ -18,16 +19,21 @@ from app.schemas import (
     MessageResponse,
     PaginatedResponse,
 )
+from app.services.llm_engine import LLMEngine
+from app.services.scorer import Scorer
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/analysis", tags=["LLM 分析"])
 
 
+def _escape_like(s: str) -> str:
+    """转义 LIKE/ILIKE 查询中的特殊字符 % 和 _"""
+    return s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 async def _run_analysis(db_session_factory, site_id: Optional[int] = None):
     """后台运行LLM分析"""
-    from app.services.llm_engine import LLMEngine
-    from app.services.scorer import Scorer
-    from app.models import RelaySite, CrawlResult, AnalysisReport
-
     llm = LLMEngine()
     scorer = Scorer()
 
@@ -43,10 +49,11 @@ async def _run_analysis(db_session_factory, site_id: Optional[int] = None):
                     return
 
                 # 获取相关爬取结果
+                escaped_name = _escape_like(site.name)
                 crawl_result = await db.execute(
                     select(CrawlResult).where(
                         (CrawlResult.relay_site_id == site_id) |
-                        (CrawlResult.title.ilike(f"%{site.name}%"))
+                        (CrawlResult.title.ilike(f"%{escaped_name}%"))
                     ).limit(10)
                 )
                 feedbacks = crawl_result.scalars().all()
@@ -86,11 +93,11 @@ async def _run_analysis(db_session_factory, site_id: Optional[int] = None):
                     site.risk_level = risk_result.get("risk_level", site.risk_level)
                     site.risk_notes = risk_result.get("notes", site.risk_notes)
 
-                site.updated_at = datetime.utcnow()
+                # 不手动设置 updated_at，依赖模型的 onupdate
             else:
                 # 批量分析未处理的爬取结果
                 result = await db.execute(
-                    select(CrawlResult).where(CrawlResult.processed == False).limit(50)
+                    select(CrawlResult).where(CrawlResult.processed.is_(False)).limit(50)
                 )
                 unprocessed = result.scalars().all()
 
@@ -104,9 +111,10 @@ async def _run_analysis(db_session_factory, site_id: Optional[int] = None):
                     extracted = await llm.analyze_relay_info(text)
                     if extracted and extracted.get("name"):
                         # 查找或创建中转站记录
+                        escaped_name = _escape_like(extracted['name'])
                         existing = await db.execute(
                             select(RelaySite).where(
-                                (RelaySite.name.ilike(f"%{extracted['name']}%")) |
+                                (RelaySite.name.ilike(f"%{escaped_name}%")) |
                                 (RelaySite.url == extracted.get("url", ""))
                             )
                         )
@@ -168,7 +176,7 @@ async def _run_analysis(db_session_factory, site_id: Optional[int] = None):
 
             await db.commit()
         except Exception as e:
-            print(f"[分析错误] {e}")
+            logger.error(f"[分析错误] {e}")
             await db.rollback()
 
 
@@ -181,7 +189,7 @@ async def run_analysis(
     # 检查是否有未处理的结果
     result = await db.execute(
         select(func.count()).select_from(
-            select(CrawlResult).where(CrawlResult.processed == False).subquery()
+            select(CrawlResult).where(CrawlResult.processed.is_(False)).subquery()
         )
     )
     count = result.scalar() or 0
@@ -189,7 +197,6 @@ async def run_analysis(
     if count == 0:
         return MessageResponse(message="没有未处理的爬取结果", success=True, data={"processed": 0})
 
-    from app.database import async_session
     background_tasks.add_task(_run_analysis, async_session)
 
     return MessageResponse(
@@ -264,7 +271,6 @@ async def evaluate_site(
     if not site:
         raise HTTPException(status_code=404, detail="中转站不存在")
 
-    from app.database import async_session
     background_tasks.add_task(_run_analysis, async_session, request.site_id)
 
     return MessageResponse(

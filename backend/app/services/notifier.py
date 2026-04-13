@@ -4,11 +4,22 @@ API Relay Monitor - 通知服务
 """
 
 import json
+import logging
+import re
 from typing import Optional, List, Dict, Any
 
 import httpx
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
+
+
+def _escape_markdown(text: str) -> str:
+    """转义 Markdown 特殊字符（_*`[]）"""
+    if not text:
+        return text
+    return re.sub(r'([_*`\[\]])', r'\\\1', text)
 
 
 class Notifier:
@@ -34,7 +45,7 @@ class Notifier:
         发送 Telegram 消息
         """
         if not self.is_telegram_configured:
-            print("[通知] Telegram 未配置，跳过发送")
+            logger.info("[通知] Telegram 未配置，跳过发送")
             return False
 
         url = f"{self.telegram_api}/bot{self.bot_token}/sendMessage"
@@ -51,10 +62,10 @@ class Notifier:
                 if resp.status_code == 200:
                     return True
                 else:
-                    print(f"[Telegram 发送失败] status={resp.status_code}, body={resp.text[:200]}")
+                    logger.warning(f"[Telegram 发送失败] status={resp.status_code}, body={resp.text[:200]}")
                     return False
         except Exception as e:
-            print(f"[Telegram 发送错误] {e}")
+            logger.error(f"[Telegram 发送错误] {e}")
             return False
 
     async def send_webhook(
@@ -82,7 +93,7 @@ class Notifier:
                 )
                 return resp.status_code < 400
         except Exception as e:
-            print(f"[Webhook 发送错误] {e}")
+            logger.error(f"[Webhook 发送错误] {e}")
             return False
 
     def format_alert_message(
@@ -96,13 +107,13 @@ class Notifier:
         emoji = {"high": "🔴", "medium": "🟡", "low": "🟢"}.get(risk_level, "⚪")
 
         message = (
-            f"{emoji} *风险提醒: {site_name}*\n\n"
+            f"{emoji} *风险提醒: {_escape_markdown(site_name)}*\n\n"
             f"风险等级: *{risk_level.upper()}*\n"
             f"综合评分: {overall_score}/10\n"
         )
 
         if risk_notes:
-            message += f"备注: {risk_notes}\n"
+            message += f"备注: {_escape_markdown(risk_notes)}\n"
 
         message += f"\n_来自 API Relay Monitor_"
         return message
@@ -117,12 +128,12 @@ class Notifier:
         message = "📊 *API 中转站日报*\n\n"
 
         if summary:
-            message += f"{summary}\n\n"
+            message += f"{_escape_markdown(summary)}\n\n"
 
         if top_picks:
             message += "🏆 *推荐站点:*\n"
             for i, pick in enumerate(top_picks[:3], 1):
-                name = pick.get("name", "未知")
+                name = _escape_markdown(pick.get("name", "未知"))
                 score = pick.get("score", 0)
                 message += f"  {i}. {name} (评分: {score})\n"
             message += "\n"
@@ -130,8 +141,8 @@ class Notifier:
         if risk_alerts:
             message += "⚠️ *风险提醒:*\n"
             for alert in risk_alerts[:5]:
-                name = alert.get("name", "未知")
-                notes = alert.get("notes", "")
+                name = _escape_markdown(alert.get("name", "未知"))
+                notes = _escape_markdown(alert.get("notes", ""))
                 message += f"  • {name}: {notes}\n"
 
         message += f"\n_来自 API Relay Monitor_"
@@ -146,10 +157,10 @@ class Notifier:
     ) -> str:
         """格式化新站点发现消息"""
         message = (
-            f"🆕 *发现新中转站: {site_name}*\n\n"
-            f"网址: {url}\n"
-            f"类型: {relay_type}\n"
-            f"来源: {source}\n\n"
+            f"🆕 *发现新中转站: {_escape_markdown(site_name)}*\n\n"
+            f"网址: {_escape_markdown(url)}\n"
+            f"类型: {_escape_markdown(relay_type)}\n"
+            f"来源: {_escape_markdown(source)}\n\n"
             f"_来自 API Relay Monitor_"
         )
         return message

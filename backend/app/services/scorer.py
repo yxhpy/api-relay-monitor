@@ -36,11 +36,11 @@ class Scorer:
         计算综合评分
         使用加权平均：稳定性40% + 价格30% + 更新速度20% + 社区10%
         """
-        # 确保各分项在 1-10 范围内
-        stability = max(1.0, min(10.0, float(stability)))
-        price = max(1.0, min(10.0, float(price)))
-        update_speed = max(1.0, min(10.0, float(update_speed)))
-        community = max(1.0, min(10.0, float(community)))
+        # 确保各分项在 1-10 范围内（None 视为默认 5.0）
+        stability = max(1.0, min(10.0, float(stability if stability is not None else 5.0)))
+        price = max(1.0, min(10.0, float(price if price is not None else 5.0)))
+        update_speed = max(1.0, min(10.0, float(update_speed if update_speed is not None else 5.0)))
+        community = max(1.0, min(10.0, float(community if community is not None else 5.0)))
 
         overall = (
             stability * self.WEIGHTS["stability"]
@@ -65,9 +65,9 @@ class Scorer:
         risk_score = 0  # 风险积分，越高越危险
 
         # 1. 基于综合评分
-        if overall_score >= self.RISK_THRESHOLDS["high_score"]:
+        if overall_score is not None and overall_score >= self.RISK_THRESHOLDS["high_score"]:
             risk_score -= 2  # 高分降低风险
-        elif overall_score >= self.RISK_THRESHOLDS["medium_score"]:
+        elif overall_score is not None and overall_score >= self.RISK_THRESHOLDS["medium_score"]:
             risk_score += 0  # 中等分数不变
         else:
             risk_score += 2  # 低分增加风险
@@ -87,6 +87,7 @@ class Scorer:
             "聚合": 0,       # 聚合类中等
             "Bedrock": 0,    # Bedrock 中等
             "逆向": 2,       # 逆向工程风险最高
+            "自建": -1,      # 自建开源风险最低
         }
         risk_score += type_risk.get(relay_type, 0)
 

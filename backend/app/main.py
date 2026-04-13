@@ -4,6 +4,7 @@ API 中转站监控系统
 """
 
 import os
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -16,25 +17,27 @@ from app.database import init_db
 from app.scheduler import start_scheduler, stop_scheduler
 from app.schemas import MessageResponse
 
+logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
     # 启动时初始化
-    print("🚀 [启动] 初始化数据库...")
+    logger.info("🚀 [启动] 初始化数据库...")
     await init_db()
-    print("✅ [启动] 数据库初始化完成")
+    logger.info("✅ [启动] 数据库初始化完成")
 
-    print("🚀 [启动] 启动定时任务调度器...")
+    logger.info("🚀 [启动] 启动定时任务调度器...")
     start_scheduler()
-    print("✅ [启动] 调度器已启动")
+    logger.info("✅ [启动] 调度器已启动")
 
     yield
 
     # 关闭时清理
-    print("⏹ [关闭] 停止调度器...")
+    logger.info("⏹ [关闭] 停止调度器...")
     stop_scheduler()
-    print("✅ [关闭] 清理完成")
+    logger.info("✅ [关闭] 清理完成")
 
 
 # 创建 FastAPI 应用
@@ -51,7 +54,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # 生产环境应限制具体域名
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -106,7 +109,7 @@ for candidate in _static_candidates:
         break
 
 if STATIC_DIR:
-    print(f"📁 [静态文件] 目录: {STATIC_DIR}")
+    logger.info(f"📁 [静态文件] 目录: {STATIC_DIR}")
 
     @app.get("/")
     async def serve_index():
@@ -114,12 +117,12 @@ if STATIC_DIR:
         return FileResponse(os.path.join(STATIC_DIR, "index.html"))
 
     # 静态资源文件（JS/CSS/images 等）
-    app.mount("/assets", StaticFiles(directory=STATIC_DIR), name="static-assets")
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static-files")
 
-    print("✅ [静态文件] 前端 UI 已挂载，访问 http://localhost:8000/ 查看")
+    logger.info("✅ [静态文件] 前端 UI 已挂载，访问 http://localhost:8000/ 查看")
 else:
-    print("⚠️  [静态文件] 未找到前端文件，仅 API 模式运行")
-    print("   → 访问 http://localhost:8000/docs 查看 API 文档")
+    logger.warning("⚠️  [静态文件] 未找到前端文件，仅 API 模式运行")
+    logger.warning("   → 访问 http://localhost:8000/docs 查看 API 文档")
 
     @app.get("/")
     async def root():

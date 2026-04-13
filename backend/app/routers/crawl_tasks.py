@@ -3,14 +3,15 @@ API Relay Monitor - 爬取任务路由
 管理数据爬取任务的触发和结果查询
 """
 
-from datetime import datetime
+import logging
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import get_db
+from app.database import get_db, async_session
 from app.models import CrawlResult
 from app.schemas import (
     CrawlResultResponse,
@@ -18,13 +19,19 @@ from app.schemas import (
     MessageResponse,
     PaginatedResponse,
 )
+from app.services.crawler import MultiSourceCrawler
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/crawl", tags=["爬取任务"])
+
+# 并发控制标志
+_is_crawling = False
 
 
 async def _run_crawl(source: str, db_session_factory):
     """后台执行爬取任务"""
-    from app.services.crawler import MultiSourceCrawler
+    global _is_crawling
 
     crawler = MultiSourceCrawler()
     results = []
@@ -39,7 +46,7 @@ async def _run_crawl(source: str, db_session_factory):
         if source in ("all", "rss"):
             results.extend(await crawler.crawl_rss())
     except Exception as e:
-        print(f"[爬取错误] source={source}, error={e}")
+        logger.error(f"[爬取错误] source={source}, error={e}")
 
     # 保存结果到数据库
     async with db_session_factory() as db:
@@ -61,12 +68,14 @@ async def _run_crawl(source: str, db_session_factory):
                 content=result_data.get("content"),
                 raw_data=result_data.get("raw_data"),
                 processed=False,
-                crawl_date=datetime.utcnow(),
+                crawl_date=datetime.now(timezone.utc),
             )
             db.add(crawl_result)
 
         await db.commit()
 
+    logger.info(f"[爬取完成] source={source}, 共 {len(results)} 条结果")
+    _is_crawling = False
     return len(results)
 
 
@@ -76,6 +85,8 @@ async def trigger_crawl(
     background_tasks: BackgroundTasks,
 ):
     """手动触发爬取任务，支持指定数据源"""
+    global _is_crawling
+
     valid_sources = ("all", "linux_do", "v2ex", "github", "rss")
     if request.source not in valid_sources:
         raise HTTPException(
@@ -83,7 +94,14 @@ async def trigger_crawl(
             detail=f"无效的数据源，支持: {', '.join(valid_sources)}",
         )
 
-    from app.database import async_session
+    # 并发控制：检查是否已有爬取任务在运行
+    if _is_crawling:
+        raise HTTPException(
+            status_code=409,
+            detail="已有爬取任务正在运行，请稍后再试",
+        )
+
+    _is_crawling = True
 
     # 在后台执行爬取
     background_tasks.add_task(_run_crawl, request.source, async_session)
@@ -91,7 +109,7 @@ async def trigger_crawl(
     return MessageResponse(
         message=f"爬取任务已启动，数据源: {request.source}",
         success=True,
-        data={"source": request.source, "triggered_at": datetime.utcnow().isoformat()},
+        data={"source": request.source, "triggered_at": datetime.now(timezone.utc).isoformat()},
     )
 
 

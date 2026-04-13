@@ -4,11 +4,34 @@ API Relay Monitor - LLM 分析引擎
 """
 
 import json
+import re
+import logging
 from typing import Dict, List, Any, Optional
 
 import httpx
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
+
+
+def _clean_json_response(text: str) -> str:
+    """统一清理 LLM 返回的 JSON 文本，去除 markdown 代码块标记和 <think/> 标签"""
+    cleaned = text.strip()
+    # 去除 <think ...>...</think:> 或 <think ...>... 标签（MiniMax 等模型的思考过程）
+    cleaned = re.sub(r'<think[^>]*>.*?(?:</think\s*>|$)', '', cleaned, flags=re.DOTALL)
+    # 去除 markdown 代码块
+    cleaned = re.sub(r'^```(?:json)?\s*\n?', '', cleaned.strip())
+    cleaned = cleaned.rstrip('`').strip()
+    # 尝试提取 JSON 对象或数组（从第一个 { 或 [ 到最后一个 } 或 ]）
+    for start_ch, end_ch in [('{', '}'), ('[', ']')]:
+        start_idx = cleaned.find(start_ch)
+        if start_idx != -1:
+            end_idx = cleaned.rfind(end_ch)
+            if end_idx > start_idx:
+                cleaned = cleaned[start_idx:end_idx + 1]
+                break
+    return cleaned
 
 
 class LLMEngine:
@@ -47,9 +70,13 @@ class LLMEngine:
                 )
                 resp.raise_for_status()
                 data = resp.json()
-                return data["choices"][0]["message"]["content"]
+                content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+                if not content:
+                    logger.warning("LLM 返回内容为空")
+                    return None
+                return content
         except Exception as e:
-            print(f"[LLM 调用错误] {e}")
+            logger.error(f"[LLM 调用错误] {e}")
             return None
 
     async def analyze_relay_info(self, text: str) -> Optional[Dict[str, Any]]:
@@ -85,24 +112,16 @@ class LLMEngine:
 
         if result:
             try:
-                # 尝试解析 JSON
-                cleaned = result.strip()
-                if cleaned.startswith("```json"):
-                    cleaned = cleaned[7:]
-                if cleaned.startswith("```"):
-                    cleaned = cleaned[3:]
-                if cleaned.endswith("```"):
-                    cleaned = cleaned[:-3]
-                return json.loads(cleaned.strip())
+                return json.loads(_clean_json_response(result))
             except json.JSONDecodeError:
-                print(f"[JSON解析错误] {result[:200]}")
+                logger.error(f"[JSON解析错误] {result[:200]}")
                 return None
         return None
 
     async def evaluate_risk(
         self,
         site_data: Dict[str, Any],
-        community_feedback: List[str] = None,
+        community_feedback: Optional[List[str]] = None,
     ) -> Optional[Dict[str, Any]]:
         """
         评估中转站风险
@@ -142,12 +161,7 @@ class LLMEngine:
 
         if result:
             try:
-                cleaned = result.strip()
-                if cleaned.startswith("```"):
-                    cleaned = cleaned.split("\n", 1)[-1] if "\n" in cleaned else cleaned[3:]
-                if cleaned.endswith("```"):
-                    cleaned = cleaned[:-3]
-                return json.loads(cleaned.strip())
+                return json.loads(_clean_json_response(result))
             except json.JSONDecodeError:
                 return {"risk_level": "medium", "notes": "LLM 分析结果解析失败", "reasoning": result}
 
@@ -185,12 +199,7 @@ class LLMEngine:
 
         if result:
             try:
-                cleaned = result.strip()
-                if cleaned.startswith("```"):
-                    cleaned = cleaned.split("\n", 1)[-1] if "\n" in cleaned else cleaned[3:]
-                if cleaned.endswith("```"):
-                    cleaned = cleaned[:-3]
-                scores = json.loads(cleaned.strip())
+                scores = json.loads(_clean_json_response(result))
                 # 确保分数在1-10范围内
                 for key in ["stability", "price", "update_speed", "community"]:
                     if key in scores:
@@ -246,12 +255,7 @@ class LLMEngine:
 
         if result:
             try:
-                cleaned = result.strip()
-                if cleaned.startswith("```"):
-                    cleaned = cleaned.split("\n", 1)[-1] if "\n" in cleaned else cleaned[3:]
-                if cleaned.endswith("```"):
-                    cleaned = cleaned[:-3]
-                return json.loads(cleaned.strip())
+                return json.loads(_clean_json_response(result))
             except json.JSONDecodeError:
                 return {"content": result, "summary": "报告已生成（格式解析异常）"}
 
@@ -283,12 +287,7 @@ class LLMEngine:
 
         if result:
             try:
-                cleaned = result.strip()
-                if cleaned.startswith("```"):
-                    cleaned = cleaned.split("\n", 1)[-1] if "\n" in cleaned else cleaned[3:]
-                if cleaned.endswith("```"):
-                    cleaned = cleaned[:-3]
-                queries = json.loads(cleaned.strip())
+                queries = json.loads(_clean_json_response(result))
                 if isinstance(queries, list):
                     return queries[:10]
             except json.JSONDecodeError:

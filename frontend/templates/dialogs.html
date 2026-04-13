@@ -1,0 +1,138 @@
+<!-- Site Add/Edit Dialog -->
+<el-dialog v-model="siteDialogVisible" :title="editingSite ? '编辑站点' : '添加站点'" width="600px" destroy-on-close>
+  <el-form :model="siteForm" label-width="100px" label-position="top">
+    <el-row :gutter="16">
+      <el-col :span="12">
+        <el-form-item label="名称" required>
+          <el-input v-model="siteForm.name" placeholder="站点名称" />
+        </el-form-item>
+      </el-col>
+      <el-col :span="12">
+        <el-form-item label="类型" required>
+          <el-select v-model="siteForm.relay_type" style="width:100%">
+            <el-option label="官转" value="官转" /><el-option label="逆向" value="逆向" />
+            <el-option label="聚合" value="聚合" /><el-option label="Bedrock" value="Bedrock" />
+          </el-select>
+        </el-form-item>
+      </el-col>
+    </el-row>
+    <el-form-item label="站点 URL" required>
+      <el-input v-model="siteForm.url" placeholder="https://example.com" />
+    </el-form-item>
+    <el-form-item label="API URL">
+      <el-input v-model="siteForm.api_url" placeholder="https://api.example.com/v1" />
+    </el-form-item>
+    <el-row :gutter="16">
+      <el-col :span="8">
+        <el-form-item label="倍率">
+          <el-input-number v-model="siteForm.price_multiplier" :min="0" :step="0.1" :precision="2" style="width:100%" />
+        </el-form-item>
+      </el-col>
+      <el-col :span="8">
+        <el-form-item label="状态">
+          <el-select v-model="siteForm.status" style="width:100%">
+            <el-option label="活跃" value="active" /><el-option label="已暂停" value="suspended" />
+            <el-option label="未知" value="unknown" />
+          </el-select>
+        </el-form-item>
+      </el-col>
+      <el-col :span="8">
+        <el-form-item label="风险等级">
+          <el-select v-model="siteForm.risk_level" style="width:100%">
+            <el-option label="低" value="low" /><el-option label="中" value="medium" />
+            <el-option label="高" value="high" />
+          </el-select>
+        </el-form-item>
+      </el-col>
+    </el-row>
+    <el-form-item label="支持的模型">
+      <el-input v-model="siteForm.supported_models_str" placeholder="模型列表，逗号分隔" />
+    </el-form-item>
+    <el-form-item label="价格信息">
+      <el-input v-model="siteForm.pricing_info" type="textarea" :rows="3" placeholder="价格信息详情" />
+    </el-form-item>
+    <el-form-item label="风险备注">
+      <el-input v-model="siteForm.risk_notes" type="textarea" :rows="2" placeholder="风险相关备注" />
+    </el-form-item>
+  </el-form>
+  <template #footer>
+    <el-button @click="siteDialogVisible = false">取消</el-button>
+    <el-button type="primary" @click="saveSite" :loading="loading.siteSave">保存</el-button>
+  </template>
+</el-dialog>
+
+<!-- Site Detail Drawer -->
+<el-drawer v-model="siteDetailVisible" :title="siteDetail?.name || '站点详情'" size="480px" direction="rtl">
+  <div v-if="siteDetail">
+    <div class="detail-section">
+      <h4>基本信息</h4>
+      <el-descriptions :column="1" border size="small">
+        <el-descriptions-item label="名称">{{ siteDetail.name }}</el-descriptions-item>
+        <el-descriptions-item label="URL">
+          <a :href="siteDetail.url" target="_blank" style="color:#409EFF;">{{ siteDetail.url }}</a>
+        </el-descriptions-item>
+        <el-descriptions-item label="API URL">
+          <a v-if="siteDetail.api_url" :href="siteDetail.api_url" target="_blank" style="color:#409EFF;">{{ siteDetail.api_url }}</a>
+          <span v-else>-</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="类型">
+          <el-tag :class="'type-tag-' + siteDetail.relay_type">{{ siteDetail.relay_type }}</el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="状态">
+          <el-tag :type="statusTagType(siteDetail.status)">{{ statusLabel(siteDetail.status) }}</el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="倍率">{{ siteDetail.price_multiplier || '-' }}</el-descriptions-item>
+      </el-descriptions>
+    </div>
+    <div class="detail-section">
+      <h4>评分详情</h4>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-top:8px;">
+        <div style="display:flex;align-items:center;gap:8px;" v-for="item in scoreItems" :key="item.key">
+          <span style="width:80px;font-size:13px;color:#909399;">{{ item.label }}</span>
+          <el-progress :percentage="(siteDetail[item.key] || 0) * 10" :stroke-width="6"
+            :color="scoreColor(siteDetail[item.key])" style="flex:1" :show-text="false" />
+          <span :style="{ color: scoreColor(siteDetail[item.key]), fontWeight: 600, fontSize: '13px', width: '32px' }">
+            {{ siteDetail[item.key]?.toFixed(1) || '0.0' }}
+          </span>
+        </div>
+      </div>
+    </div>
+    <div class="detail-section">
+      <h4>风险信息</h4>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
+        <span style="font-size:13px;color:#909399;">风险等级:</span>
+        <el-tag :type="riskTagType(siteDetail.risk_level)" effect="dark">{{ riskLabel(siteDetail.risk_level) }}</el-tag>
+      </div>
+      <div v-if="siteDetail.risk_notes" style="margin-top:8px;font-size:13px;color:#606266;">{{ siteDetail.risk_notes }}</div>
+    </div>
+    <div v-if="siteDetail.supported_models && siteDetail.supported_models.length" class="detail-section">
+      <h4>支持模型</h4>
+      <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:8px;">
+        <el-tag v-for="m in siteDetail.supported_models" :key="m" size="small" effect="plain" style="margin:2px;">{{ m }}</el-tag>
+      </div>
+    </div>
+    <div v-if="siteDetail.pricing_info" class="detail-section">
+      <h4>价格信息</h4>
+      <div class="markdown-content" style="margin-top:8px;" v-html="renderMarkdown(siteDetail.pricing_info)"></div>
+    </div>
+    <div style="margin-top:16px;display:flex;gap:8px;">
+      <el-button type="primary" @click="openSiteDialog(siteDetail); siteDetailVisible = false;">编辑</el-button>
+      <el-button @click="siteDetailVisible = false">关闭</el-button>
+    </div>
+  </div>
+</el-drawer>
+
+<!-- Crawl Detail Dialog -->
+<el-dialog v-model="crawlDetailVisible" :title="crawlDetail?.title || '爬取详情'" width="700px">
+  <div v-if="crawlDetail">
+    <el-descriptions :column="2" border size="small" style="margin-bottom:16px;">
+      <el-descriptions-item label="来源">{{ sourceLabel(crawlDetail.source) }}</el-descriptions-item>
+      <el-descriptions-item label="爬取时间">{{ formatTime(crawlDetail.crawled_at || crawlDetail.created_at) }}</el-descriptions-item>
+      <el-descriptions-item label="来源链接" :span="2">
+        <a v-if="crawlDetail.source_url" :href="crawlDetail.source_url" target="_blank" style="color:#409EFF;">{{ crawlDetail.source_url }}</a>
+        <span v-else>-</span>
+      </el-descriptions-item>
+    </el-descriptions>
+    <div style="max-height:400px;overflow-y:auto;line-height:1.8;white-space:pre-wrap;font-size:14px;color:#303133;">{{ crawlDetail.content }}</div>
+  </div>
+</el-dialog>

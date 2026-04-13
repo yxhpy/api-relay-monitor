@@ -4,7 +4,9 @@ API Relay Monitor - 定时任务调度器
 """
 
 import asyncio
+import logging
 from datetime import datetime
+from typing import Optional
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
@@ -12,14 +14,15 @@ from apscheduler.triggers.cron import CronTrigger
 
 from app.config import settings
 
+logger = logging.getLogger(__name__)
 
 # 全局调度器实例
-scheduler: AsyncIOScheduler = None
+scheduler: Optional[AsyncIOScheduler] = None
 
 
 async def scheduled_crawl():
     """定时爬取任务"""
-    print(f"[调度器] 开始定时爬取 - {datetime.utcnow().isoformat()}")
+    logger.info(f"[调度器] 开始定时爬取 - {datetime.utcnow().isoformat()}")
     try:
         from app.services.crawler import MultiSourceCrawler
         from app.database import async_session
@@ -56,15 +59,15 @@ async def scheduled_crawl():
                 saved_count += 1
 
             await db.commit()
-            print(f"[调度器] 爬取完成，保存 {saved_count} 条新结果")
+            logger.info(f"[调度器] 爬取完成，保存 {saved_count} 条新结果")
 
     except Exception as e:
-        print(f"[调度器] 爬取任务错误: {e}")
+        logger.error(f"[调度器] 爬取任务错误: {e}")
 
 
 async def scheduled_analysis():
     """定时分析任务"""
-    print(f"[调度器] 开始定时分析 - {datetime.utcnow().isoformat()}")
+    logger.info(f"[调度器] 开始定时分析 - {datetime.utcnow().isoformat()}")
     try:
         from app.services.llm_engine import LLMEngine
         from app.services.scorer import Scorer
@@ -78,18 +81,18 @@ async def scheduled_analysis():
         async with async_session() as db:
             # 检查是否有未处理结果
             count_result = await db.execute(
-                select(func.count(CrawlResult.id)).where(CrawlResult.processed == False)
+                select(func.count(CrawlResult.id)).where(CrawlResult.processed.is_(False))
             )
             unprocessed_count = count_result.scalar() or 0
 
             if unprocessed_count == 0:
-                print("[调度器] 没有未处理的结果")
+                logger.info("[调度器] 没有未处理的结果")
                 return
 
             # 获取未处理结果
             result = await db.execute(
                 select(CrawlResult)
-                .where(CrawlResult.processed == False)
+                .where(CrawlResult.processed.is_(False))
                 .limit(20)
             )
             unprocessed = result.scalars().all()
@@ -134,8 +137,8 @@ async def scheduled_analysis():
                                 site.relay_type or "未知",
                                 crawl_item.source,
                             )
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.warning(f"通知发送失败: {e}")
 
                     if site:
                         crawl_item.relay_site_id = site.id
@@ -143,15 +146,15 @@ async def scheduled_analysis():
                 crawl_item.processed = True
 
             await db.commit()
-            print(f"[调度器] 分析完成，处理 {len(unprocessed)} 条结果")
+            logger.info(f"[调度器] 分析完成，处理 {len(unprocessed)} 条结果")
 
     except Exception as e:
-        print(f"[调度器] 分析任务错误: {e}")
+        logger.error(f"[调度器] 分析任务错误: {e}")
 
 
 async def scheduled_daily_report():
     """定时生成日报"""
-    print(f"[调度器] 生成日报 - {datetime.utcnow().isoformat()}")
+    logger.info(f"[调度器] 生成日报 - {datetime.utcnow().isoformat()}")
     try:
         from app.services.llm_engine import LLMEngine
         from app.database import async_session
@@ -166,7 +169,7 @@ async def scheduled_daily_report():
             sites = result.scalars().all()
 
             if not sites:
-                print("[调度器] 无站点数据，跳过日报生成")
+                logger.info("[调度器] 无站点数据，跳过日报生成")
                 return
 
             sites_data = [
@@ -213,13 +216,13 @@ async def scheduled_daily_report():
                         [{"name": s.name, "score": s.overall_score} for s in top_sites],
                         [{"name": s.name, "notes": s.risk_notes} for s in high_risk],
                     )
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning(f"通知发送失败: {e}")
 
-                print("[调度器] 日报已生成并发送")
+                logger.info("[调度器] 日报已生成并发送")
 
     except Exception as e:
-        print(f"[调度器] 日报生成错误: {e}")
+        logger.error(f"[调度器] 日报生成错误: {e}")
 
 
 def start_scheduler():
@@ -261,7 +264,7 @@ def start_scheduler():
     )
 
     scheduler.start()
-    print(f"[调度器] 已启动，爬取间隔: {interval_minutes} 分钟, 分析间隔: {analysis_interval} 分钟")
+    logger.info(f"[调度器] 已启动，爬取间隔: {interval_minutes} 分钟, 分析间隔: {analysis_interval} 分钟")
 
 
 def stop_scheduler():
@@ -270,4 +273,4 @@ def stop_scheduler():
     if scheduler:
         scheduler.shutdown(wait=False)
         scheduler = None
-        print("[调度器] 已停止")
+        logger.info("[调度器] 已停止")

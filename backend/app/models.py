@@ -3,7 +3,7 @@ API Relay Monitor - 数据库模型
 定义所有 SQLAlchemy ORM 模型
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import (
     Column, Integer, String, Float, Text, Boolean, DateTime, JSON, ForeignKey,
     Enum as SQLEnum,
@@ -13,16 +13,20 @@ from sqlalchemy.orm import relationship
 from app.database import Base
 
 
+def _utcnow():
+    return datetime.now(timezone.utc)
+
+
 class RelaySite(Base):
     """中转站信息表"""
     __tablename__ = "relay_sites"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(200), nullable=False, comment="站点名称")
-    url = Column(String(500), nullable=False, comment="站点网址")
+    url = Column(String(500), nullable=False, unique=True, index=True, comment="站点网址")
     api_url = Column(String(500), nullable=True, comment="API端点URL")
     relay_type = Column(
-        SQLEnum("官转", "逆向", "聚合", "Bedrock", name="relay_type_enum"),
+        SQLEnum("官转", "逆向", "聚合", "Bedrock", "自建", name="relay_type_enum"),
         default="聚合",
         comment="中转类型",
     )
@@ -50,12 +54,12 @@ class RelaySite(Base):
     )
     risk_notes = Column(Text, nullable=True, comment="风险备注")
     last_verified_at = Column(DateTime, nullable=True, comment="最后验证时间")
-    created_at = Column(DateTime, default=datetime.utcnow, comment="创建时间")
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, comment="更新时间")
+    created_at = Column(DateTime, default=_utcnow, comment="创建时间")
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow, comment="更新时间")
 
     # 关系
-    crawl_results = relationship("CrawlResult", back_populates="relay_site", lazy="selectin")
-    price_histories = relationship("PriceHistory", back_populates="relay_site", lazy="selectin")
+    crawl_results = relationship("CrawlResult", back_populates="relay_site", lazy="noload")
+    price_histories = relationship("PriceHistory", back_populates="relay_site", lazy="noload")
 
 
 class CrawlResult(Base):
@@ -74,8 +78,8 @@ class CrawlResult(Base):
     raw_data = Column(JSON, nullable=True, comment="原始数据JSON")
     processed = Column(Boolean, default=False, comment="是否已处理")
     relay_site_id = Column(Integer, ForeignKey("relay_sites.id"), nullable=True, comment="关联中转站ID")
-    crawl_date = Column(DateTime, default=datetime.utcnow, comment="爬取日期")
-    created_at = Column(DateTime, default=datetime.utcnow, comment="创建时间")
+    crawl_date = Column(DateTime, default=_utcnow, comment="爬取日期")
+    created_at = Column(DateTime, default=_utcnow, comment="创建时间")
 
     # 关系
     relay_site = relationship("RelaySite", back_populates="crawl_results")
@@ -90,7 +94,7 @@ class PriceHistory(Base):
     model_name = Column(String(200), nullable=False, comment="模型名称")
     multiplier = Column(Float, nullable=True, comment="倍率")
     price_per_1k_tokens = Column(Float, nullable=True, comment="每1K token价格")
-    recorded_at = Column(DateTime, default=datetime.utcnow, comment="记录时间")
+    recorded_at = Column(DateTime, default=_utcnow, comment="记录时间")
 
     # 关系
     relay_site = relationship("RelaySite", back_populates="price_histories")
@@ -110,4 +114,4 @@ class AnalysisReport(Base):
     summary = Column(Text, nullable=True, comment="摘要")
     top_picks = Column(JSON, nullable=True, comment="推荐站点JSON")
     risk_alerts = Column(JSON, nullable=True, comment="风险提醒JSON")
-    created_at = Column(DateTime, default=datetime.utcnow, comment="创建时间")
+    created_at = Column(DateTime, default=_utcnow, comment="创建时间")

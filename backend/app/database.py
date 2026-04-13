@@ -3,19 +3,31 @@ API Relay Monitor - 数据库配置
 使用 SQLAlchemy 异步引擎
 """
 
+from urllib.parse import urlparse
+from pathlib import Path
+
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
-import os
 
 from app.config import settings
 
 
 # 确保数据目录存在
-db_path = settings.DATABASE_URL.replace("sqlite+aiosqlite:///", "")
-if db_path.startswith("./"):
-    db_dir = os.path.dirname(db_path)
-    if db_dir:
-        os.makedirs(db_dir, exist_ok=True)
+_db_url = settings.DATABASE_URL
+_parsed = urlparse(_db_url)
+if _parsed.scheme.startswith("sqlite"):
+    # urlparse 对 sqlite:///./data/db.db 返回 path="/./data/db.db"
+    # 需要提取实际路径部分（去掉开头的 / 如果是相对路径）
+    db_path = _parsed.path
+    if db_path.startswith("/./"):
+        # 相对路径: sqlite:///./data/db.db → ./data/db.db
+        db_path = db_path[1:]
+    elif db_path.startswith("/") and not db_path.startswith("//"):
+        # 绝对路径: sqlite:////app/data/db.db → /app/data/db.db
+        pass
+    db_dir = Path(db_path).parent
+    if db_dir and str(db_dir) != ".":
+        db_dir.mkdir(parents=True, exist_ok=True)
 
 
 # 创建异步引擎
@@ -43,7 +55,8 @@ async def get_db() -> AsyncSession:
     async with async_session() as session:
         try:
             yield session
-            await session.commit()
+            if session.in_transaction() and session.is_active:
+                await session.commit()
         except Exception:
             await session.rollback()
             raise

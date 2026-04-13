@@ -2,10 +2,15 @@ services:
   api-relay-monitor:
     build: .
     ports:
-      - "8900:8000"
+      - "8901:8000"
     volumes:
       - ./data:/app/data
       - ./.env:/app/.env
     environment:
-      - DATABASE_URL=sqlite+aiosqlite:///./data/relay_monitor.db
+      - DATABASE_URL=sqlite+aiosqlite:////app/data/relay_monitor.db
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

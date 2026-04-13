@@ -4,8 +4,8 @@ API Relay Monitor - Pydantic 数据模型
 """
 
 from datetime import datetime
-from typing import Optional, List, Any
-from pydantic import BaseModel, Field, HttpUrl
+from typing import Optional, List, Any, Literal
+from pydantic import BaseModel, Field
 
 
 # ============ RelaySite Schemas ============
@@ -15,8 +15,8 @@ class RelaySiteCreate(BaseModel):
     name: str = Field(..., max_length=200, description="站点名称")
     url: str = Field(..., max_length=500, description="站点网址")
     api_url: Optional[str] = Field(None, max_length=500, description="API端点URL")
-    relay_type: Optional[str] = Field("聚合", description="中转类型：官转/逆向/聚合/Bedrock")
-    status: Optional[str] = Field("unknown", description="状态：active/suspended/unknown")
+    relay_type: Optional[Literal["官转", "逆向", "聚合", "Bedrock", "自建"]] = Field("聚合", description="中转类型：官转/逆向/聚合/Bedrock/自建")
+    status: Optional[Literal["active", "suspended", "unknown"]] = Field("unknown", description="状态：active/suspended/unknown")
     description: Optional[str] = Field(None, description="站点描述")
     pricing_info: Optional[dict] = Field(None, description="定价信息")
     price_multiplier: Optional[float] = Field(None, description="价格倍率")
@@ -24,6 +24,10 @@ class RelaySiteCreate(BaseModel):
     registration_url: Optional[str] = Field(None, max_length=500, description="注册链接")
     telegram_group: Optional[str] = Field(None, max_length=200, description="Telegram群组")
     source: Optional[str] = Field(None, max_length=100, description="信息来源")
+    community_rating: Optional[float] = Field(5.0, ge=1, le=10, description="社区评分 1-10")
+    stability_score: Optional[float] = Field(5.0, ge=1, le=10, description="稳定性评分 1-10")
+    price_score: Optional[float] = Field(5.0, ge=1, le=10, description="价格评分 1-10")
+    update_speed_score: Optional[float] = Field(5.0, ge=1, le=10, description="更新速度评分 1-10")
 
 
 class RelaySiteUpdate(BaseModel):
@@ -31,8 +35,8 @@ class RelaySiteUpdate(BaseModel):
     name: Optional[str] = Field(None, max_length=200)
     url: Optional[str] = Field(None, max_length=500)
     api_url: Optional[str] = Field(None, max_length=500)
-    relay_type: Optional[str] = None
-    status: Optional[str] = None
+    relay_type: Optional[Literal["官转", "逆向", "聚合", "Bedrock", "自建"]] = None
+    status: Optional[Literal["active", "suspended", "unknown"]] = None
     description: Optional[str] = None
     pricing_info: Optional[dict] = None
     price_multiplier: Optional[float] = None
@@ -44,8 +48,8 @@ class RelaySiteUpdate(BaseModel):
     stability_score: Optional[float] = Field(None, ge=1, le=10)
     price_score: Optional[float] = Field(None, ge=1, le=10)
     update_speed_score: Optional[float] = Field(None, ge=1, le=10)
-    overall_score: Optional[float] = None
-    risk_level: Optional[str] = None
+    overall_score: Optional[float] = Field(None, ge=0, le=10)
+    risk_level: Optional[Literal["low", "medium", "high"]] = None
     risk_notes: Optional[str] = None
     last_verified_at: Optional[datetime] = None
 

@@ -1,0 +1,65 @@
+<!-- ========== Crawl Center ========== -->
+<div v-if="currentPage === 'crawl'" key="crawl">
+  <div class="section-card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <el-tabs v-model="crawlFilters.source" @tab-change="() => { crawlPagination.page = 1; loadCrawlResults(); }">
+        <el-tab-pane label="全部" name="all" />
+        <el-tab-pane label="linux.do" name="linux_do" />
+        <el-tab-pane label="V2EX" name="v2ex" />
+        <el-tab-pane label="GitHub" name="github" />
+        <el-tab-pane label="RSS" name="rss" />
+      </el-tabs>
+      <div style="display:flex;gap:8px;">
+        <el-select v-model="crawlTriggerSource" style="width:140px" placeholder="选择来源">
+          <el-option label="全部来源" value="all" /><el-option label="linux.do" value="linux_do" />
+          <el-option label="V2EX" value="v2ex" /><el-option label="GitHub" value="github" />
+          <el-option label="RSS" value="rss" />
+        </el-select>
+        <el-button type="primary" :loading="loading.crawlTrigger" @click="triggerCrawl(crawlTriggerSource)">
+          <el-icon><Download /></el-icon> 开始采集
+        </el-button>
+      </div>
+    </div>
+
+    <el-table :data="crawlResults" v-loading="loading.crawl" stripe style="width:100%">
+      <el-table-column prop="source" label="来源" width="110" align="center">
+        <template #default="{ row }">
+          <el-tag size="small" effect="plain">{{ sourceLabel(row.source) }}</el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column prop="title" label="标题" min-width="200">
+        <template #default="{ row }">
+          <div style="font-weight:500;cursor:pointer;" @click="viewCrawlDetail(row)">{{ row.title }}</div>
+        </template>
+      </el-table-column>
+      <el-table-column prop="content" label="内容摘要" min-width="280">
+        <template #default="{ row }">
+          <span style="color:#606266;">{{ (row.content || '').substring(0, 100) }}{{ (row.content || '').length > 100 ? '...' : '' }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column prop="processed" label="已处理" width="90" align="center">
+        <template #default="{ row }">
+          <el-tag :type="row.processed ? 'success' : 'info'" size="small">{{ row.processed ? '是' : '否' }}</el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column prop="crawled_at" label="爬取时间" width="160">
+        <template #default="{ row }">{{ formatTime(row.crawled_at || row.created_at) }}</template>
+      </el-table-column>
+      <el-table-column label="操作" width="120" align="center">
+        <template #default="{ row }">
+          <el-button link type="primary" size="small" @click="viewCrawlDetail(row)">查看</el-button>
+          <el-button v-if="!row.processed" link type="success" size="small" @click="markProcessed(row)">处理</el-button>
+        </template>
+      </el-table-column>
+    </el-table>
+
+    <div style="display:flex;justify-content:flex-end;margin-top:16px;">
+      <el-pagination background layout="total, sizes, prev, pager, next"
+        :total="crawlTotal" :page-size="crawlPagination.page_size"
+        :page-sizes="[10, 20, 50, 100]"
+        :current-page="crawlPagination.page"
+        @current-change="(p) => { crawlPagination.page = p; loadCrawlResults(); }"
+        @size-change="(s) => { crawlPagination.page_size = s; crawlPagination.page = 1; loadCrawlResults(); }" />
+    </div>
+  </div>
+</div>

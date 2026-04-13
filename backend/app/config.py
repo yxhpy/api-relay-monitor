@@ -3,15 +3,19 @@ API Relay Monitor - 配置管理
 使用 pydantic-settings 管理环境变量配置
 """
 
+import logging
 from typing import Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import model_validator
+
+logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
     """应用配置，从环境变量或 .env 文件加载"""
 
     # LLM 配置
-    LLM_API_KEY: str = "sk-placeholder"
+    LLM_API_KEY: str = ""
     LLM_API_BASE: str = "https://api.openai.com/v1"
     LLM_MODEL: str = "gpt-4o-mini"
 
@@ -42,6 +46,12 @@ class Settings(BaseSettings):
         case_sensitive=True,
         extra="ignore",
     )
+
+    @model_validator(mode="after")
+    def check_llm_api_key(self) -> "Settings":
+        if not self.LLM_API_KEY:
+            logger.warning("LLM_API_KEY 未设置，LLM 相关功能将不可用")
+        return self
 
 
 # 全局配置实例

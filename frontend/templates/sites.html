@@ -1,0 +1,95 @@
+<!-- ========== Relay Sites ========== -->
+<div v-if="currentPage === 'sites'" key="sites">
+  <div class="section-card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <el-input v-model="sitesFilters.keyword" placeholder="搜索站点名称/URL" clearable style="width:220px"
+          :prefix-icon="Search" @keyup.enter="loadSites" />
+        <el-select v-model="sitesFilters.type" placeholder="类型" clearable style="width:120px" @change="loadSites">
+          <el-option label="官转" value="官转" /><el-option label="逆向" value="逆向" />
+          <el-option label="聚合" value="聚合" /><el-option label="Bedrock" value="Bedrock" />
+        </el-select>
+        <el-select v-model="sitesFilters.status" placeholder="状态" clearable style="width:120px" @change="loadSites">
+          <el-option label="活跃" value="active" /><el-option label="已暂停" value="suspended" />
+          <el-option label="未知" value="unknown" />
+        </el-select>
+        <el-select v-model="sitesFilters.risk_level" placeholder="风险等级" clearable style="width:120px" @change="loadSites">
+          <el-option label="低风险" value="low" /><el-option label="中风险" value="medium" />
+          <el-option label="高风险" value="high" />
+        </el-select>
+        <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:#909399;">
+          <span>最低评分</span>
+          <el-slider v-model="sitesFilters.min_score" :min="0" :max="10" :step="0.5"
+            style="width:120px" @change="loadSites" />
+          <span>{{ sitesFilters.min_score }}</span>
+        </div>
+      </div>
+      <el-button type="primary" @click="openSiteDialog(null)">
+        <el-icon><Plus /></el-icon> 添加站点
+      </el-button>
+    </div>
+
+    <el-table :data="sitesData" v-loading="loading.sites" stripe @sort-change="handleSitesSortChange"
+      style="width:100%" @row-click="(row) => viewSiteDetail(row.id)">
+      <el-table-column prop="name" label="名称" min-width="160" sortable="custom">
+        <template #default="{ row }">
+          <div style="font-weight:500;">{{ row.name }}</div>
+          <div style="font-size:12px;color:#909399;">{{ row.url }}</div>
+        </template>
+      </el-table-column>
+      <el-table-column prop="relay_type" label="类型" width="100" align="center">
+        <template #default="{ row }">
+          <el-tag :class="'type-tag-' + row.relay_type" size="small">{{ row.relay_type }}</el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column prop="price_multiplier" label="倍率" width="80" align="center" sortable="custom">
+        <template #default="{ row }">
+          <b>{{ row.price_multiplier || '-' }}</b>
+        </template>
+      </el-table-column>
+      <el-table-column prop="overall_score" label="综合评分" width="180" sortable="custom">
+        <template #default="{ row }">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <el-progress :percentage="(row.overall_score || 0) * 10" :stroke-width="8"
+              :color="scoreColor(row.overall_score)" style="flex:1" v-bind:show-text="false" />
+            <span :style="{ color: scoreColor(row.overall_score), fontWeight: 600, fontSize: '13px' }">
+              {{ row.overall_score?.toFixed(1) || '0.0' }}
+            </span>
+          </div>
+        </template>
+      </el-table-column>
+      <el-table-column prop="risk_level" label="风险等级" width="100" align="center">
+        <template #default="{ row }">
+          <el-tag :type="riskTagType(row.risk_level)" size="small" effect="dark">{{ riskLabel(row.risk_level) }}</el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column prop="status" label="状态" width="90" align="center">
+        <template #default="{ row }">
+          <el-tag :type="statusTagType(row.status)" size="small" effect="plain">{{ statusLabel(row.status) }}</el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column prop="last_verified" label="最后验证" width="160" sortable="custom">
+        <template #default="{ row }">{{ formatTime(row.last_verified) }}</template>
+      </el-table-column>
+      <el-table-column label="操作" width="140" align="center" fixed="right">
+        <template #default="{ row }">
+          <el-button link type="primary" size="small" @click.stop="openSiteDialog(row)">编辑</el-button>
+          <el-popconfirm title="确认删除该站点?" @confirm="deleteSite(row.id)">
+            <template #reference>
+              <el-button link type="danger" size="small" @click.stop>删除</el-button>
+            </template>
+          </el-popconfirm>
+        </template>
+      </el-table-column>
+    </el-table>
+
+    <div style="display:flex;justify-content:flex-end;margin-top:16px;">
+      <el-pagination background layout="total, prev, pager, next, sizes"
+        :total="sitesTotal" :page-size="sitesPagination.page_size"
+        :current-page="sitesPagination.page"
+        @current-change="(p) => { sitesPagination.page = p; loadSites(); }"
+        @size-change="(s) => { sitesPagination.page_size = s; sitesPagination.page = 1; loadSites(); }"
+        :page-sizes="[10, 20, 50]" />
+    </div>
+  </div>
+</div>

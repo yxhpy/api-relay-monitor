@@ -3,9 +3,13 @@ API Relay Monitor - 中转站 CRUD 路由
 提供中转站信息的增删改查接口
 """
 
-from datetime import datetime
+import ipaddress
+import logging
+from datetime import datetime, timezone
 from typing import Optional
+from urllib.parse import urlparse
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, func, case
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,7 +26,39 @@ from app.schemas import (
 )
 from app.services.scorer import Scorer
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/api/sites", tags=["中转站管理"])
+
+# 私有 IP 网段（用于 SSRF 防护）
+_PRIVATE_NETWORKS = [
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("169.254.0.0/16"),
+]
+
+
+def _is_private_url(url: str) -> bool:
+    """检查 URL 是否指向私有 IP 或 localhost"""
+    try:
+        parsed = urlparse(url)
+        hostname = parsed.hostname
+        if not hostname:
+            return True
+        if hostname.lower() in ("localhost", "localhost.localdomain"):
+            return True
+        try:
+            ip = ipaddress.ip_address(hostname)
+            for network in _PRIVATE_NETWORKS:
+                if ip in network:
+                    return True
+        except ValueError:
+            pass  # 不是 IP 地址（可能是域名），允许
+        return False
+    except Exception:
+        return True
 
 
 @router.get("", response_model=PaginatedResponse, summary="获取中转站列表")
@@ -111,7 +147,7 @@ async def create_site(
         update_speed=site.update_speed_score,
         community=site.community_rating,
     )
-    site.risk_level = scorer.calculate_risk_level(site.overall_score, site.price_multiplier)
+    site.risk_level = scorer.calculate_risk_level(site.overall_score, site.price_multiplier, site.relay_type)
 
     db.add(site)
     await db.flush()
@@ -165,8 +201,7 @@ async def update_site(
         update_speed=site.update_speed_score,
         community=site.community_rating,
     )
-    site.risk_level = scorer.calculate_risk_level(site.overall_score, site.price_multiplier)
-    site.updated_at = datetime.utcnow()
+    site.risk_level = scorer.calculate_risk_level(site.overall_score, site.price_multiplier, site.relay_type)
 
     await db.flush()
     await db.refresh(site)
@@ -207,11 +242,13 @@ async def verify_site(
     if not site:
         raise HTTPException(status_code=404, detail="中转站不存在")
 
-    # 尝试访问站点检查可用性
-    import httpx
+    # SSRF 防护：检查 URL 是否指向私有 IP
+    check_url = site.api_url or site.url
+    if _is_private_url(check_url):
+        raise HTTPException(status_code=400, detail="不允许验证私有网络地址")
+
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            check_url = site.api_url or site.url
             resp = await client.get(check_url, follow_redirects=True)
             if resp.status_code < 500:
                 site.status = "active"
@@ -220,8 +257,8 @@ async def verify_site(
     except Exception:
         site.status = "suspended"
 
-    site.last_verified_at = datetime.utcnow()
-    site.updated_at = datetime.utcnow()
+    site.last_verified_at = datetime.now(timezone.utc)
+    # 不手动设置 updated_at，依赖模型的 onupdate
     await db.flush()
 
     return MessageResponse(

@@ -1,0 +1,91 @@
+<!-- ========== Analysis ========== -->
+<div v-if="currentPage === 'analysis'" key="analysis">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+    <!-- Reports list -->
+    <div class="section-card">
+      <div class="section-title">
+        <span><el-icon><Document /></el-icon> 分析报告</span>
+        <el-button type="primary" size="small" :loading="loading.analysisRun" @click="runAnalysis">
+          <el-icon><DataAnalysis /></el-icon> 运行分析
+        </el-button>
+      </div>
+      <el-tabs v-model="analysisFilter" @tab-change="loadReports">
+        <el-tab-pane label="全部" name="all" />
+        <el-tab-pane label="日报" name="daily" />
+        <el-tab-pane label="周报" name="weekly" />
+        <el-tab-pane label="预警" name="alert" />
+      </el-tabs>
+      <div v-if="loading.reports" style="display:flex;flex-direction:column;gap:12px;">
+        <div class="skeleton-card" style="height:60px" v-for="i in 4" :key="i"></div>
+      </div>
+      <div v-else-if="reports.length === 0" style="text-align:center;padding:40px;color:#909399;">
+        <el-icon style="font-size:36px;margin-bottom:8px"><Document /></el-icon>
+        <p>暂无报告</p>
+      </div>
+      <div v-else>
+        <div v-for="report in reports" :key="report.id"
+          style="padding:14px;border:1px solid #ebeef5;border-radius:8px;margin-bottom:8px;cursor:pointer;transition:all 0.2s;"
+          :style="{ borderColor: selectedReport?.id === report.id ? '#409EFF' : '', background: selectedReport?.id === report.id ? '#f0f7ff' : '' }"
+          @click="selectReport(report)">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div>
+              <el-tag :type="report.report_type === 'daily' ? '' : report.report_type === 'weekly' ? 'success' : 'danger'" size="small" style="margin-right:8px;">
+                {{ report.report_type === 'daily' ? '日报' : report.report_type === 'weekly' ? '周报' : '预警' }}
+              </el-tag>
+              <span style="font-weight:500;">{{ report.summary || report.title || '分析报告' }}</span>
+            </div>
+            <span style="font-size:12px;color:#909399;">{{ formatTime(report.created_at) }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Report detail -->
+    <div class="section-card">
+      <div class="section-title">
+        <span><el-icon><View /></el-icon> 报告详情</span>
+      </div>
+      <div v-if="!selectedReport" style="text-align:center;padding:60px;color:#909399;">
+        <el-icon style="font-size:48px;margin-bottom:12px"><View /></el-icon>
+        <p>请选择左侧报告查看详情</p>
+      </div>
+      <div v-else>
+        <div style="margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid #ebeef5;">
+          <div style="font-size:18px;font-weight:600;">{{ selectedReport.summary || selectedReport.title }}</div>
+          <div style="font-size:13px;color:#909399;margin-top:4px;">{{ formatTime(selectedReport.created_at) }}</div>
+        </div>
+        <div v-if="selectedReport.top_picks" style="margin-bottom:16px;">
+          <strong>推荐站点:</strong>
+          <el-tag v-for="p in (selectedReport.top_picks || [])" :key="p" size="small" style="margin:4px;">{{ p }}</el-tag>
+        </div>
+        <div class="markdown-content" v-html="renderMarkdown(selectedReport.content || '')"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Evaluate Site -->
+  <div class="section-card" style="margin-top:20px;">
+    <div class="section-title"><span><el-icon><Cpu /></el-icon> 智能评估站点</span></div>
+    <div style="display:flex;gap:12px;align-items:center;">
+      <el-input v-model="evaluateUrl" placeholder="输入站点 ID 或 URL 进行 LLM 智能评估" style="flex:1;" clearable />
+      <el-button type="primary" :loading="loading.evaluate" @click="evaluateSite">
+        <el-icon><Cpu /></el-icon> 开始评估
+      </el-button>
+    </div>
+    <div v-if="evaluateResult" style="margin-top:20px;">
+      <el-descriptions :column="2" border>
+        <el-descriptions-item label="站点名称">{{ evaluateResult.name || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="类型">{{ evaluateResult.relay_type || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="综合评分">
+          <span :style="{ color: scoreColor(evaluateResult.overall_score), fontWeight: 600 }">
+            {{ evaluateResult.overall_score?.toFixed(1) || '-' }}
+          </span>
+        </el-descriptions-item>
+        <el-descriptions-item label="风险等级">
+          <el-tag :type="riskTagType(evaluateResult.risk_level)" size="small">{{ riskLabel(evaluateResult.risk_level) }}</el-tag>
+        </el-descriptions-item>
+      </el-descriptions>
+      <div v-if="evaluateResult.analysis" class="markdown-content" style="margin-top:16px;" v-html="renderMarkdown(evaluateResult.analysis)"></div>
+    </div>
+  </div>
+</div>

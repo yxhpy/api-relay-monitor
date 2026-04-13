@@ -3,11 +3,12 @@ API Relay Monitor - 仪表盘路由
 提供统计概览、趋势、推荐和风险提醒接口
 """
 
-from datetime import datetime, timedelta
+import logging
+from datetime import datetime, timedelta, timezone
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select, func, case, and_
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import select, func, case, and_, literal_column
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -20,7 +21,14 @@ from app.schemas import (
     MessageResponse,
 )
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/api/dashboard", tags=["仪表盘"])
+
+
+def _escape_like(s: str) -> str:
+    """转义 LIKE/ILIKE 查询中的特殊字符 % 和 _"""
+    return s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 @router.get("/stats", response_model=DashboardStats, summary="获取概览统计")
@@ -74,7 +82,7 @@ async def get_stats(db: AsyncSession = Depends(get_db)):
     total_crawl_results = total_crawl.scalar() or 0
 
     unprocessed_crawl = await db.execute(
-        select(func.count(CrawlResult.id)).where(CrawlResult.processed == False)
+        select(func.count(CrawlResult.id)).where(CrawlResult.processed.is_(False))
     )
     unprocessed_results = unprocessed_crawl.scalar() or 0
 
@@ -103,27 +111,29 @@ async def get_stats(db: AsyncSession = Depends(get_db)):
 
 @router.get("/trends", response_model=List[TrendDataPoint], summary="获取价格趋势")
 async def get_trends(
-    days: int = 30,
+    days: int = Query(30, ge=1, le=365, description="天数"),
     model_name: str = None,
     db: AsyncSession = Depends(get_db),
 ):
     """获取价格趋势数据"""
-    since = datetime.utcnow() - timedelta(days=days)
+    since = datetime.now(timezone.utc) - timedelta(days=days)
 
+    date_col = func.date(PriceHistory.recorded_at).label("date")
     query = (
         select(
-            func.date(PriceHistory.recorded_at).label("date"),
+            date_col,
             PriceHistory.model_name,
             func.avg(PriceHistory.multiplier).label("avg_multiplier"),
             func.avg(PriceHistory.price_per_1k_tokens).label("avg_price"),
         )
         .where(PriceHistory.recorded_at >= since)
-        .group_by("date", PriceHistory.model_name)
-        .order_by("date")
+        .group_by(date_col, PriceHistory.model_name)
+        .order_by(date_col)
     )
 
     if model_name:
-        query = query.where(PriceHistory.model_name.ilike(f"%{model_name}%"))
+        escaped = _escape_like(model_name)
+        query = query.where(PriceHistory.model_name.ilike(f"%{escaped}%"))
 
     result = await db.execute(query)
     rows = result.all()
