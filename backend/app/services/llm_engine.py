@@ -88,18 +88,23 @@ class LLMEngine:
             {
                 "role": "system",
                 "content": (
-                    "你是一个专业的 API 中转站信息提取助手。请从给定的文本中提取中转站的关键信息。"
+                    "你是一个专业的 API 中转站信息提取助手。你的任务是从文本中提取**实际运营的 API 中转站**信息。\n\n"
+                    "⚠️ 重要规则：\n"
+                    "- 只提取**实际可用、有注册入口的中转站**（如 closeai-asia.com, api2d.net, siliconflow.cn 等）\n"
+                    "- **不要提取开源项目/代码仓库**（如 one-api, new-api, litellm 等只是建站工具，不是中转站本身）\n"
+                    "- **不要提取 GitHub 仓库链接**（github.com/xxx/yyy 不是中转站）\n"
+                    "- 如果文本中没有实际运营的中转站，请返回 null\n\n"
                     "请以 JSON 格式返回，包含以下字段：\n"
                     "- name: 站点名称\n"
-                    "- url: 站点网址\n"
+                    "- url: 站点网址（必须是实际可访问的网站，不是 GitHub 仓库）\n"
                     "- api_url: API端点（如果有）\n"
-                    "- relay_type: 中转类型（官转/逆向/聚合/Bedrock，根据描述判断）\n"
-                    "- description: 简短描述\n"
-                    "- pricing_info: 定价信息对象\n"
-                    "- price_multiplier: 价格倍率（数字）\n"
+                    "- relay_type: 中转类型（官转/逆向/聚合/公益/Bedrock，根据描述判断）\n"
+                    "- description: 简短描述（一句话说明这个站的特点）\n"
+                    "- pricing_info: 定价信息\n"
+                    "- price_multiplier: 价格倍率（数字，与官方价格对比，免费站为 0）\n"
                     "- supported_models: 支持的模型列表\n"
                     "- registration_url: 注册链接\n"
-                    "\n如果某个字段无法确定，请设为 null。只返回 JSON，不要其他内容。"
+                    "\n如果文本中没有实际运营的中转站信息，请返回 null。只返回 JSON，不要其他内容。"
                 ),
             },
             {

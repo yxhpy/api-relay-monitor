@@ -15,7 +15,7 @@ class RelaySiteCreate(BaseModel):
     name: str = Field(..., max_length=200, description="站点名称")
     url: str = Field(..., max_length=500, description="站点网址")
     api_url: Optional[str] = Field(None, max_length=500, description="API端点URL")
-    relay_type: Optional[Literal["官转", "逆向", "聚合", "Bedrock", "自建"]] = Field("聚合", description="中转类型：官转/逆向/聚合/Bedrock/自建")
+    relay_type: Optional[Literal["官转", "逆向", "聚合", "公益", "Bedrock", "自建"]] = Field("聚合", description="中转类型：官转/逆向/聚合/公益/Bedrock/自建")
     status: Optional[Literal["active", "suspended", "unknown"]] = Field("unknown", description="状态：active/suspended/unknown")
     description: Optional[str] = Field(None, description="站点描述")
     pricing_info: Optional[dict] = Field(None, description="定价信息")
@@ -35,7 +35,7 @@ class RelaySiteUpdate(BaseModel):
     name: Optional[str] = Field(None, max_length=200)
     url: Optional[str] = Field(None, max_length=500)
     api_url: Optional[str] = Field(None, max_length=500)
-    relay_type: Optional[Literal["官转", "逆向", "聚合", "Bedrock", "自建"]] = None
+    relay_type: Optional[Literal["官转", "逆向", "聚合", "公益", "Bedrock", "自建"]] = None
     status: Optional[Literal["active", "suspended", "unknown"]] = None
     description: Optional[str] = None
     pricing_info: Optional[dict] = None

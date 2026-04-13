@@ -26,7 +26,7 @@ class RelaySite(Base):
     url = Column(String(500), nullable=False, unique=True, index=True, comment="站点网址")
     api_url = Column(String(500), nullable=True, comment="API端点URL")
     relay_type = Column(
-        SQLEnum("官转", "逆向", "聚合", "Bedrock", "自建", name="relay_type_enum"),
+        SQLEnum("官转", "逆向", "聚合", "公益", "Bedrock", "自建", name="relay_type_enum"),
         default="聚合",
         comment="中转类型",
     )
@@ -67,11 +67,7 @@ class CrawlResult(Base):
     __tablename__ = "crawl_results"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    source = Column(
-        SQLEnum("linux_do", "v2ex", "github", "rss", "other", name="source_enum"),
-        nullable=False,
-        comment="数据来源",
-    )
+    source = Column(String(50), nullable=False, comment="数据来源")
     source_url = Column(String(500), nullable=True, comment="来源URL")
     title = Column(String(500), nullable=True, comment="标题")
     content = Column(Text, nullable=True, comment="内容")
