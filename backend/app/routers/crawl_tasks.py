@@ -1,6 +1,7 @@
 """
 API Relay Monitor - 爬取任务路由
 管理数据爬取任务的触发和结果查询
+基于 BaseCrawler 抽象层 + CrawlerRegistry 注册中心
 """
 
 import logging
@@ -19,36 +20,39 @@ from app.schemas import (
     MessageResponse,
     PaginatedResponse,
 )
-from app.services.crawler import MultiSourceCrawler
+from app.services.crawlers import create_registry
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/crawl", tags=["爬取任务"])
 
+# 全局爬虫注册中心（单例）
+_registry = create_registry()
+
 # 并发控制标志
 _is_crawling = False
 
 
+def get_registry():
+    """获取爬虫注册中心"""
+    return _registry
+
+
 async def _run_crawl(source: str, db_session_factory):
-    """后台执行爬取任务"""
+    """后台执行爬取任务 — 通过 Registry 分发"""
     global _is_crawling
 
-    crawler = MultiSourceCrawler()
-    results = []
-
     try:
-        if source in ("all", "linux_do"):
-            results.extend(await crawler.crawl_linux_do())
-        if source in ("all", "v2ex"):
-            results.extend(await crawler.crawl_v2ex())
-        if source in ("all", "github"):
-            results.extend(await crawler.crawl_github())
-        if source in ("all", "rss"):
-            results.extend(await crawler.crawl_rss())
+        if source == "all":
+            results = await _registry.crawl_all()
+        else:
+            results = await _registry.crawl_source(source)
     except Exception as e:
         logger.error(f"[爬取错误] source={source}, error={e}")
+        results = []
 
     # 保存结果到数据库
+    saved = 0
     async with db_session_factory() as db:
         for result_data in results:
             # 检查是否已存在相同来源URL的结果（去重）
@@ -71,12 +75,33 @@ async def _run_crawl(source: str, db_session_factory):
                 crawl_date=datetime.now(timezone.utc),
             )
             db.add(crawl_result)
+            saved += 1
 
         await db.commit()
 
-    logger.info(f"[爬取完成] source={source}, 共 {len(results)} 条结果")
+    logger.info(f"[爬取完成] source={source}, 获取 {len(results)} 条, 新增保存 {saved} 条")
     _is_crawling = False
-    return len(results)
+    return saved
+
+
+@router.get("/sources", summary="获取可用数据源列表")
+async def list_sources():
+    """返回所有已注册的爬虫数据源（动态获取）"""
+    sources = _registry.list_sources()
+    # 中文标签映射
+    labels = {
+        "known_sites": "白名单种子",
+        "linux_do": "linux.do",
+        "v2ex": "V2EX",
+        "github": "GitHub",
+        "hackernews": "HackerNews",
+    }
+    return {
+        "sources": [
+            {"key": s, "label": labels.get(s, s)}
+            for s in sources
+        ],
+    }
 
 
 @router.post("/trigger", response_model=MessageResponse, summary="手动触发爬取")
@@ -84,17 +109,17 @@ async def trigger_crawl(
     request: CrawlTriggerRequest,
     background_tasks: BackgroundTasks,
 ):
-    """手动触发爬取任务，支持指定数据源"""
+    """手动触发爬取任务，支持指定数据源或 all"""
     global _is_crawling
 
-    valid_sources = ("all", "linux_do", "v2ex", "github", "rss")
+    available = _registry.list_sources()
+    valid_sources = ("all",) + tuple(available)
     if request.source not in valid_sources:
         raise HTTPException(
             status_code=400,
-            detail=f"无效的数据源，支持: {', '.join(valid_sources)}",
+            detail=f"无效的数据源，可用: {', '.join(valid_sources)}",
         )
 
-    # 并发控制：检查是否已有爬取任务在运行
     if _is_crawling:
         raise HTTPException(
             status_code=409,
@@ -102,8 +127,6 @@ async def trigger_crawl(
         )
 
     _is_crawling = True
-
-    # 在后台执行爬取
     background_tasks.add_task(_run_crawl, request.source, async_session)
 
     return MessageResponse(
@@ -125,16 +148,15 @@ async def list_crawl_results(
     query = select(CrawlResult)
 
     if source:
-        query = query.where(CrawlResult.source == source)
+        # 支持模糊匹配（如 github 匹配 github_discussions, github_awesome_list）
+        query = query.where(CrawlResult.source.ilike(f"{source}%"))
     if processed is not None:
         query = query.where(CrawlResult.processed == processed)
 
-    # 统计总数
     count_query = select(func.count()).select_from(query.subquery())
     total_result = await db.execute(count_query)
     total = total_result.scalar() or 0
 
-    # 分页
     query = query.order_by(CrawlResult.created_at.desc())
     offset = (page - 1) * page_size
     query = query.offset(offset).limit(page_size)

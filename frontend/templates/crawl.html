@@ -4,16 +4,12 @@
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
       <el-tabs v-model="crawlFilters.source" @tab-change="() => { crawlPagination.page = 1; loadCrawlResults(); }">
         <el-tab-pane label="全部" name="all" />
-        <el-tab-pane label="linux.do" name="linux_do" />
-        <el-tab-pane label="V2EX" name="v2ex" />
-        <el-tab-pane label="GitHub" name="github" />
-        <el-tab-pane label="RSS" name="rss" />
+        <el-tab-pane v-for="src in crawlSources" :key="src.key" :label="src.label" :name="src.key" />
       </el-tabs>
       <div style="display:flex;gap:8px;">
-        <el-select v-model="crawlTriggerSource" style="width:140px" placeholder="选择来源">
-          <el-option label="全部来源" value="all" /><el-option label="linux.do" value="linux_do" />
-          <el-option label="V2EX" value="v2ex" /><el-option label="GitHub" value="github" />
-          <el-option label="RSS" value="rss" />
+        <el-select v-model="crawlTriggerSource" style="width:150px" placeholder="选择来源">
+          <el-option label="全部来源" value="all" />
+          <el-option v-for="src in crawlSources" :key="src.key" :label="src.label" :value="src.key" />
         </el-select>
         <el-button type="primary" :loading="loading.crawlTrigger" @click="triggerCrawl(crawlTriggerSource)">
           <el-icon><Download /></el-icon> 开始采集
@@ -22,7 +18,7 @@
     </div>
 
     <el-table :data="crawlResults" v-loading="loading.crawl" stripe style="width:100%">
-      <el-table-column prop="source" label="来源" width="110" align="center">
+      <el-table-column prop="source" label="来源" width="130" align="center">
         <template #default="{ row }">
           <el-tag size="small" effect="plain">{{ sourceLabel(row.source) }}</el-tag>
         </template>

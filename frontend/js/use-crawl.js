@@ -1,6 +1,6 @@
 /**
  * Composable: Crawl 模块
- * 职责：采集中心数据加载、触发采集、详情查看
+ * 职责：采集中心数据加载、触发采集、详情查看、动态数据源
  */
 function useCrawl(api, loading, Formatters) {
   const crawlResults = Vue.ref([]);
@@ -10,6 +10,16 @@ function useCrawl(api, loading, Formatters) {
   const crawlTriggerSource = Vue.ref('all');
   const crawlDetailVisible = Vue.ref(false);
   const crawlDetail = Vue.ref(null);
+  const crawlSources = Vue.ref([]);
+
+  async function loadCrawlSources() {
+    try {
+      const data = await api.get('/api/crawl/sources');
+      crawlSources.value = data.sources || [];
+    } catch (e) {
+      console.error('loadCrawlSources:', e);
+    }
+  }
 
   async function loadCrawlResults() {
     loading.crawl = true;
@@ -59,6 +69,7 @@ function useCrawl(api, loading, Formatters) {
   return {
     crawlResults, crawlTotal, crawlFilters, crawlPagination,
     crawlTriggerSource, crawlDetailVisible, crawlDetail,
+    crawlSources, loadCrawlSources,
     loadCrawlResults, triggerCrawl, viewCrawlDetail, markProcessed,
   };
 }

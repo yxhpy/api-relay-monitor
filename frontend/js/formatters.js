@@ -24,7 +24,18 @@ const Formatters = {
     return map[s] || s || '-';
   },
   sourceLabel(s) {
-    const map = { linux_do: 'linux.do', v2ex: 'V2EX', github: 'GitHub', rss: 'RSS' };
+    const map = {
+      linux_do: 'linux.do',
+      linux_do_tag: 'linux.do',
+      v2ex: 'V2EX',
+      github: 'GitHub',
+      github_discussions: 'GitHub',
+      github_awesome: 'GitHub',
+      rss: 'RSS',
+      hackernews: 'HackerNews',
+      known_sites: '白名单种子',
+      nav_sites: '导航站',
+    };
     return map[s] || s;
   },
   formatTime(t) {

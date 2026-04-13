@@ -60,7 +60,7 @@
       function refreshCurrentPage() {
         if (currentPage.value === 'dashboard') dashboard.loadDashboard();
         else if (currentPage.value === 'sites') sites.loadSites();
-        else if (currentPage.value === 'crawl') crawl.loadCrawlResults();
+        else if (currentPage.value === 'crawl') { crawl.loadCrawlSources(); crawl.loadCrawlResults(); }
         else if (currentPage.value === 'analysis') analysis.loadReports();
         else if (currentPage.value === 'reviews') { reviews.initReviews(); }
       }
@@ -87,7 +87,7 @@
       watch(currentPage, (page) => {
         if (page === 'dashboard') dashboard.loadDashboard();
         else if (page === 'sites') sites.loadSites();
-        else if (page === 'crawl') crawl.loadCrawlResults();
+        else if (page === 'crawl') { crawl.loadCrawlSources(); crawl.loadCrawlResults(); }
         else if (page === 'analysis') analysis.loadReports();
         else if (page === 'reviews') { reviews.initReviews(); }
       });
