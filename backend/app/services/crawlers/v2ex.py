@@ -20,8 +20,7 @@ class V2EXCrawler(BaseCrawler):
     ENDPOINTS = [
         "https://www.v2ex.com/api/topics/latest.json",
         "https://www.v2ex.com/api/topics/hot.json",
-        "https://www.v2ex.com/api/nodes/python/topics.json?p=1",
-        "https://www.v2ex.com/api/nodes/ai/topics.json?p=1",
+        "https://www.v2ex.com/api/topics/latest.json?p=2",
     ]
 
     async def crawl(self) -> List[CrawlResult]:

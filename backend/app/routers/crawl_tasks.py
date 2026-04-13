@@ -53,31 +53,47 @@ async def _run_crawl(source: str, db_session_factory):
 
     # 保存结果到数据库
     saved = 0
-    async with db_session_factory() as db:
-        for result_data in results:
-            # 检查是否已存在相同来源URL的结果（去重）
-            if result_data.get("source_url"):
-                existing = await db.execute(
-                    select(CrawlResult).where(
-                        CrawlResult.source_url == result_data["source_url"]
+    try:
+        async with db_session_factory() as db:
+            for result_data in results:
+                # crawl_safe() 返回 dict（通过 to_dict() 转换）
+                if isinstance(result_data, dict):
+                    source_url = result_data.get("source_url")
+                    cr_source = result_data.get("source", "other")
+                    cr_title = result_data.get("title")
+                    cr_content = result_data.get("content")
+                    cr_raw = result_data.get("raw_data")
+                else:
+                    source_url = result_data.source_url
+                    cr_source = result_data.source or "other"
+                    cr_title = result_data.title
+                    cr_content = result_data.content
+                    cr_raw = result_data.raw_data
+
+                if source_url:
+                    existing = await db.execute(
+                        select(CrawlResult).where(
+                            CrawlResult.source_url == source_url
+                        )
                     )
+                    if existing.scalars().first():
+                        continue
+
+                crawl_result = CrawlResult(
+                    source=cr_source,
+                    source_url=source_url,
+                    title=cr_title,
+                    content=cr_content,
+                    raw_data=cr_raw,
+                    processed=False,
+                    crawl_date=datetime.now(timezone.utc),
                 )
-                if existing.scalars().first():
-                    continue
+                db.add(crawl_result)
+                saved += 1
 
-            crawl_result = CrawlResult(
-                source=result_data.get("source", "other"),
-                source_url=result_data.get("source_url"),
-                title=result_data.get("title"),
-                content=result_data.get("content"),
-                raw_data=result_data.get("raw_data"),
-                processed=False,
-                crawl_date=datetime.now(timezone.utc),
-            )
-            db.add(crawl_result)
-            saved += 1
-
-        await db.commit()
+            await db.commit()
+    except Exception as e:
+        logger.error(f"[保存错误] source={source}, error={e}")
 
     logger.info(f"[爬取完成] source={source}, 获取 {len(results)} 条, 新增保存 {saved} 条")
     _is_crawling = False
@@ -95,6 +111,14 @@ async def list_sources():
         "v2ex": "V2EX",
         "github": "GitHub",
         "hackernews": "HackerNews",
+        "reddit": "Reddit",
+        "nitter": "X/Twitter",
+        "nav_sites": "导航站",
+        "zhihu": "知乎",
+        "producthunt": "ProductHunt",
+        "weibo": "微博",
+        "douyin": "抖音热榜",
+        "rss_feed": "RSS订阅",
     }
     return {
         "sources": [

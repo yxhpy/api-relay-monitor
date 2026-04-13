@@ -350,8 +350,7 @@ class MultiSourceCrawler:
             for endpoint in [
                 "https://www.v2ex.com/api/topics/latest.json",
                 "https://www.v2ex.com/api/topics/hot.json",
-                "https://www.v2ex.com/api/nodes/python/topics.json?p=1",
-                "https://www.v2ex.com/api/nodes/ai/topics.json?p=1",
+                "https://www.v2ex.com/api/topics/latest.json?p=2",
             ]:
                 for attempt in range(3):
                     try:

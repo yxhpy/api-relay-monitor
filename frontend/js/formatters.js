@@ -31,10 +31,17 @@ const Formatters = {
       github: 'GitHub',
       github_discussions: 'GitHub',
       github_awesome: 'GitHub',
-      rss: 'RSS',
       hackernews: 'HackerNews',
       known_sites: '白名单种子',
       nav_sites: '导航站',
+      reddit: 'Reddit',
+      nitter: 'X/Twitter',
+      zhihu: '知乎',
+      producthunt: 'ProductHunt',
+      weibo: '微博',
+      douyin: '抖音热榜',
+      rss_feed: 'RSS',
+      rss: 'RSS',
     };
     return map[s] || s;
   },
