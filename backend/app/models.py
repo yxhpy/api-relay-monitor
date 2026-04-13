@@ -53,6 +53,9 @@ class RelaySite(Base):
         comment="风险等级",
     )
     risk_notes = Column(Text, nullable=True, comment="风险备注")
+    avg_response_ms = Column(Float, nullable=True, comment="平均响应时间(ms)")
+    uptime_percent = Column(Float, nullable=True, comment="可用率(%)")
+    user_reviews = Column(JSON, nullable=True, comment="用户评价列表JSON")
     last_verified_at = Column(DateTime, nullable=True, comment="最后验证时间")
     created_at = Column(DateTime, default=_utcnow, comment="创建时间")
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow, comment="更新时间")

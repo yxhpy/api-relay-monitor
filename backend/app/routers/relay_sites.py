@@ -63,11 +63,12 @@ def _is_private_url(url: str) -> bool:
 
 @router.get("", response_model=PaginatedResponse, summary="获取中转站列表")
 async def list_sites(
+    keyword: Optional[str] = Query(None, description="关键词搜索（名称/URL）"),
     relay_type: Optional[str] = Query(None, description="中转类型筛选"),
     status: Optional[str] = Query(None, description="状态筛选"),
     risk_level: Optional[str] = Query(None, description="风险等级筛选"),
     min_score: Optional[float] = Query(None, description="最低综合评分"),
-    sort_by: str = Query("updated_at", description="排序字段"),
+    sort_by: str = Query("overall_score", description="排序字段"),
     sort_order: str = Query("desc", description="排序方向 asc/desc"),
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(20, ge=1, le=100, description="每页数量"),
@@ -77,6 +78,12 @@ async def list_sites(
     # 构建查询
     query = select(RelaySite)
 
+    # 关键词搜索
+    if keyword:
+        escaped = keyword.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        query = query.where(
+            (RelaySite.name.ilike(f"%{escaped}%")) | (RelaySite.url.ilike(f"%{escaped}%"))
+        )
     # 应用筛选条件
     if relay_type:
         query = query.where(RelaySite.relay_type == relay_type)
@@ -93,9 +100,9 @@ async def list_sites(
     total = total_result.scalar() or 0
 
     # 排序（白名单校验防止注入）
-    ALLOWED_SORT_FIELDS = {"updated_at", "created_at", "overall_score", "name", "status", "risk_level", "price_multiplier"}
+    ALLOWED_SORT_FIELDS = {"updated_at", "created_at", "overall_score", "name", "status", "risk_level", "price_multiplier", "last_verified_at"}
     if sort_by not in ALLOWED_SORT_FIELDS:
-        sort_by = "updated_at"
+        sort_by = "overall_score"
     sort_column = getattr(RelaySite, sort_by, RelaySite.updated_at)
     if sort_order == "desc":
         sort_column = sort_column.desc()
@@ -233,7 +240,7 @@ async def verify_site(
     site_id: int,
     db: AsyncSession = Depends(get_db),
 ):
-    """触发中转站验证，检查站点是否可达"""
+    """触发中转站验证，检查站点是否可达，记录响应时间作为稳定性指标"""
     result = await db.execute(
         select(RelaySite).where(RelaySite.id == site_id)
     )
@@ -247,9 +254,15 @@ async def verify_site(
     if _is_private_url(check_url):
         raise HTTPException(status_code=400, detail="不允许验证私有网络地址")
 
+    response_time_ms = None
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            import time
+            start = time.monotonic()
             resp = await client.get(check_url, follow_redirects=True)
+            elapsed = time.monotonic() - start
+            response_time_ms = round(elapsed * 1000, 0)
+
             if resp.status_code < 500:
                 site.status = "active"
             else:
@@ -258,11 +271,52 @@ async def verify_site(
         site.status = "suspended"
 
     site.last_verified_at = datetime.now(timezone.utc)
-    # 不手动设置 updated_at，依赖模型的 onupdate
+
+    # 更新响应时间（取最近3次的平均值）
+    if response_time_ms is not None:
+        prev_avg = site.avg_response_ms or response_time_ms
+        site.avg_response_ms = round((prev_avg * 2 + response_time_ms) / 3, 0)
+
+        # 基于响应时间更新稳定性评分
+        if response_time_ms < 500:
+            site.stability_score = min(10.0, (site.stability_score or 7.0) + 0.3)
+        elif response_time_ms < 1500:
+            site.stability_score = min(10.0, (site.stability_score or 7.0) + 0.1)
+        elif response_time_ms < 3000:
+            pass  # 不加分不扣分
+        else:
+            site.stability_score = max(1.0, (site.stability_score or 7.0) - 0.5)
+
+        # 更新可用率
+        if site.status == "active":
+            site.uptime_percent = min(100.0, (site.uptime_percent or 95.0) + 0.5)
+        else:
+            site.uptime_percent = max(0.0, (site.uptime_percent or 95.0) - 5.0)
+
+    # 重新计算综合评分
+    scorer = Scorer()
+    site.overall_score = scorer.calculate_overall_score(
+        stability=site.stability_score,
+        price=site.price_score,
+        update_speed=site.update_speed_score,
+        community=site.community_rating,
+    )
+    site.risk_level = scorer.calculate_risk_level(
+        site.overall_score, site.price_multiplier, site.relay_type
+    )
+
     await db.flush()
 
     return MessageResponse(
-        message=f"验证完成，状态：{site.status}",
+        message=f"验证完成，状态：{site.status}，响应时间：{response_time_ms:.0f}ms",
         success=True,
-        data={"status": site.status, "verified_at": site.last_verified_at.isoformat()},
+        data={
+            "status": site.status,
+            "response_ms": response_time_ms,
+            "avg_response_ms": site.avg_response_ms,
+            "uptime_percent": site.uptime_percent,
+            "stability_score": site.stability_score,
+            "overall_score": site.overall_score,
+            "verified_at": site.last_verified_at.isoformat(),
+        },
     )

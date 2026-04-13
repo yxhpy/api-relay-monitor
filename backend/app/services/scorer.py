@@ -72,8 +72,8 @@ class Scorer:
         else:
             risk_score += 2  # 低分增加风险
 
-        # 2. 基于价格倍率
-        if price_multiplier is not None:
+        # 2. 基于价格倍率（公益站免费是正常模式，跳过异常低价检查）
+        if price_multiplier is not None and relay_type != "公益":
             if price_multiplier <= self.RISK_THRESHOLDS["low_multiplier"]:
                 risk_score += 3  # 异常低价，高风险
             elif price_multiplier > self.RISK_THRESHOLDS["high_multiplier"]:
@@ -84,6 +84,7 @@ class Scorer:
         # 3. 基于中转类型
         type_risk = {
             "官转": -1,      # 官方转售风险最低
+            "公益": -1,      # 公益站风险低
             "聚合": 0,       # 聚合类中等
             "Bedrock": 0,    # Bedrock 中等
             "逆向": 2,       # 逆向工程风险最高

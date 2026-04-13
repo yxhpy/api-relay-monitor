@@ -159,7 +159,7 @@ async def get_top_picks(
         select(RelaySite)
         .where(
             and_(
-                RelaySite.status == "active",
+                RelaySite.status.in_(["active", "unknown"]),
                 RelaySite.risk_level.in_(["low", "medium"]),
             )
         )
@@ -177,6 +177,8 @@ async def get_top_picks(
             overall_score=site.overall_score or 0,
             price_multiplier=site.price_multiplier,
             risk_level=site.risk_level,
+            stability_score=site.stability_score,
+            avg_response_ms=site.avg_response_ms,
         )
         for site in sites
     ]

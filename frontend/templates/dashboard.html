@@ -16,13 +16,13 @@
     </div>
     <div class="stat-card score">
       <div class="stat-icon"><el-icon><Star /></el-icon></div>
-      <div class="stat-value">{{ dashboardStats.avg_score?.toFixed(1) || '0.0' }}</div>
+      <div class="stat-value">{{ dashboardStats.avg_overall_score?.toFixed(1) || '0.0' }}</div>
       <div class="stat-label">平均评分</div>
       <div class="stat-bg"></div>
     </div>
     <div class="stat-card risk">
       <div class="stat-icon"><el-icon><WarningFilled /></el-icon></div>
-      <div class="stat-value">{{ dashboardStats.risk_count || 0 }}</div>
+      <div class="stat-value">{{ (dashboardStats.high_risk_count || 0) + (dashboardStats.medium_risk_count || 0) }}</div>
       <div class="stat-label">风险预警</div>
       <div class="stat-bg"></div>
     </div>
@@ -68,7 +68,7 @@
             <div class="pick-score" :style="{ color: scoreColor(pick.overall_score) }">{{ pick.overall_score?.toFixed(1) }}</div>
           </div>
           <div class="pick-meta">
-            <div>倍率: <b>{{ pick.price_multiplier || 'N/A' }}</b> &nbsp;|&nbsp; 稳定性: <b>{{ pick.stability_score?.toFixed(1) }}</b></div>
+            <div>倍率: <b>{{ pick.price_multiplier ?? 'N/A' }}</b> &nbsp;|&nbsp; 稳定性: <b>{{ pick.stability_score?.toFixed(1) || 'N/A' }}</b> &nbsp;|&nbsp; 延迟: <b>{{ pick.avg_response_ms ? pick.avg_response_ms + 'ms' : 'N/A' }}</b></div>
             <div>风险: <el-tag :type="riskTagType(pick.risk_level)" size="small">{{ riskLabel(pick.risk_level) }}</el-tag></div>
           </div>
         </div>
@@ -91,9 +91,9 @@
         <el-timeline>
           <el-timeline-item v-for="alert in riskAlerts.slice(0, 8)" :key="alert.id"
             :timestamp="alert.time || alert.created_at" placement="top"
-            :type="alert.level === 'high' ? 'danger' : alert.level === 'medium' ? 'warning' : 'success'">
-            <div style="font-size:14px;font-weight:500;">{{ alert.title || alert.name }}</div>
-            <div style="font-size:12px;color:#909399;margin-top:4px;">{{ alert.description || alert.risk_notes }}</div>
+            :type="alert.risk_level === 'high' ? 'danger' : alert.risk_level === 'medium' ? 'warning' : 'success'">
+            <div style="font-size:14px;font-weight:500;">{{ alert.site_name }}</div>
+            <div style="font-size:12px;color:#909399;margin-top:4px;">{{ alert.risk_notes || '暂无详细风险说明' }}</div>
           </el-timeline-item>
         </el-timeline>
       </div>

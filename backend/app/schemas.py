@@ -51,6 +51,9 @@ class RelaySiteUpdate(BaseModel):
     overall_score: Optional[float] = Field(None, ge=0, le=10)
     risk_level: Optional[Literal["low", "medium", "high"]] = None
     risk_notes: Optional[str] = None
+    avg_response_ms: Optional[float] = None
+    uptime_percent: Optional[float] = None
+    user_reviews: Optional[list] = None
     last_verified_at: Optional[datetime] = None
 
 
@@ -76,6 +79,9 @@ class RelaySiteResponse(BaseModel):
     overall_score: Optional[float] = None
     risk_level: Optional[str] = None
     risk_notes: Optional[str] = None
+    avg_response_ms: Optional[float] = None
+    uptime_percent: Optional[float] = None
+    user_reviews: Optional[list] = None
     last_verified_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
@@ -202,6 +208,8 @@ class TopPick(BaseModel):
     overall_score: float
     price_multiplier: Optional[float] = None
     risk_level: Optional[str] = None
+    stability_score: Optional[float] = None
+    avg_response_ms: Optional[float] = None
 
 
 class RiskAlert(BaseModel):
