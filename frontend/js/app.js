@@ -20,6 +20,7 @@
       const crawl = useCrawl(api, loading, Formatters);
       const analysis = useAnalysis(api, loading);
       const settingsModule = useSettings(api, loading);
+      const reviews = useReviews;
 
       // --- 全局 UI 状态 ---
       const initializing = ref(true);
@@ -29,6 +30,7 @@
       const navItems = [
         { key: 'dashboard', label: '仪表盘', icon: 'Odometer' },
         { key: 'sites', label: '中转站列表', icon: 'Monitor' },
+        { key: 'reviews', label: '用户评价', icon: 'ChatDotRound' },
         { key: 'crawl', label: '采集中心', icon: 'Download' },
         { key: 'analysis', label: '智能分析', icon: 'DataAnalysis' },
         { key: 'settings', label: '系统设置', icon: 'Setting' },
@@ -60,6 +62,7 @@
         else if (currentPage.value === 'sites') sites.loadSites();
         else if (currentPage.value === 'crawl') crawl.loadCrawlResults();
         else if (currentPage.value === 'analysis') analysis.loadReports();
+        else if (currentPage.value === 'reviews') { reviews.initReviews(); }
       }
 
       // --- 生命周期 ---
@@ -86,6 +89,7 @@
         else if (page === 'sites') sites.loadSites();
         else if (page === 'crawl') crawl.loadCrawlResults();
         else if (page === 'analysis') analysis.loadReports();
+        else if (page === 'reviews') { reviews.initReviews(); }
       });
 
       return {
@@ -101,6 +105,8 @@
         ...analysis,
         // Settings
         ...settingsModule,
+        // Reviews
+        ...reviews,
         // Navigation
         navigateTo, refreshCurrentPage,
         // Formatters

@@ -219,3 +219,62 @@ class RiskAlert(BaseModel):
     risk_level: str
     risk_notes: Optional[str] = None
     overall_score: Optional[float] = None
+
+
+# ============ SiteReview Schemas ============
+
+class SiteReviewCreate(BaseModel):
+    """创建评价"""
+    relay_site_id: int = Field(..., description="关联中转站ID")
+    platform: str = Field(..., max_length=50, description="来源: linux_do/v2ex/x/telegram/reddit")
+    source_url: Optional[str] = Field(None, max_length=500)
+    author: Optional[str] = Field(None, max_length=200)
+    content: str = Field(..., description="评价原文")
+    sentiment: Optional[Literal["positive", "negative", "neutral", "mixed"]] = "neutral"
+    sentiment_score: Optional[float] = Field(None, ge=-1.0, le=1.0)
+    rating: Optional[float] = Field(None, ge=1, le=10)
+    likes: Optional[int] = 0
+    replies: Optional[int] = 0
+    posted_at: Optional[datetime] = None
+
+
+class SiteReviewResponse(BaseModel):
+    """评价响应"""
+    id: int
+    relay_site_id: int
+    platform: str
+    source_url: Optional[str] = None
+    author: Optional[str] = None
+    content: str
+    sentiment: str
+    sentiment_score: Optional[float] = None
+    rating: Optional[float] = None
+    likes: int = 0
+    replies: int = 0
+    posted_at: Optional[datetime] = None
+    llm_summary: Optional[str] = None
+    llm_tags: Optional[list] = None
+    created_at: Optional[datetime] = None
+
+    model_config = {"from_attributes": True}
+
+
+class ReviewAnalysisRequest(BaseModel):
+    """LLM 分析请求"""
+    site_id: Optional[int] = Field(None, description="指定站点ID（不填则分析全部）")
+    platform: Optional[str] = Field(None, description="筛选来源平台")
+    limit: int = Field(50, ge=1, le=200, description="分析评价数量上限")
+
+
+class ReviewAnalysisResponse(BaseModel):
+    """LLM 分析结果"""
+    site_id: Optional[int] = None
+    site_name: Optional[str] = None
+    total_reviews: int = 0
+    sentiment_distribution: dict = {}
+    avg_rating: Optional[float] = None
+    top_keywords: list = []
+    llm_summary: Optional[str] = None
+    llm_tags: Optional[list] = None
+    highlights: list = []   # 代表性评价
+    risks: list = []         # 风险提示

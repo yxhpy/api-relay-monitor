@@ -11,6 +11,7 @@
   const TEMPLATE_FILES = [
     'dashboard.html',
     'sites.html',
+    'reviews.html',
     'crawl.html',
     'analysis.html',
     'settings.html',

@@ -1,0 +1,142 @@
+<!-- ========== Reviews ========== -->
+<div v-if="currentPage === 'reviews'" key="reviews">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      <el-select v-model="reviewFilters.site_id" placeholder="全部站点" clearable style="width:200px" @change="loadReviews()">
+        <el-option v-for="s in reviewSites" :key="s.id" :label="s.name" :value="s.id" />
+      </el-select>
+      <el-select v-model="reviewFilters.platform" placeholder="全部平台" clearable style="width:140px" @change="loadReviews()">
+        <el-option label="linux.do" value="linux_do" />
+        <el-option label="V2EX" value="v2ex" />
+        <el-option label="X / Twitter" value="x" />
+        <el-option label="Telegram" value="telegram" />
+        <el-option label="Reddit" value="reddit" />
+      </el-select>
+      <el-select v-model="reviewFilters.sentiment" placeholder="全部情感" clearable style="width:120px" @change="loadReviews()">
+        <el-option label="👍 正面" value="positive" />
+        <el-option label="👎 负面" value="negative" />
+        <el-option label="😐 中性" value="neutral" />
+        <el-option label="🤔 混合" value="mixed" />
+      </el-select>
+      <el-input v-model="reviewFilters.keyword" placeholder="搜索关键词..." clearable style="width:180px" @keydown.enter="loadReviews()" @clear="loadReviews()" />
+    </div>
+    <div style="display:flex;gap:8px;">
+      <el-button type="primary" @click="loadReviews()" :icon="Refresh" circle />
+      <el-button type="success" @click="seedReviews" :loading="reviewSeeding">📥 导入种子评价</el-button>
+      <el-button type="warning" @click="runAnalysis" :loading="reviewAnalyzing">🤖 LLM 分析</el-button>
+    </div>
+  </div>
+
+  <!-- 统计卡片 -->
+  <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px;">
+    <div class="section-card" style="text-align:center;padding:12px;">
+      <div style="font-size:1.5rem;font-weight:700;">{{ reviewStats.total_reviews || 0 }}</div>
+      <div style="font-size:0.75rem;color:#a3a6b7;">总评价</div>
+    </div>
+    <div class="section-card" style="text-align:center;padding:12px;">
+      <div style="font-size:1.5rem;font-weight:700;color:#67c23a;">{{ reviewStats.sentiment_distribution?.positive || 0 }}</div>
+      <div style="font-size:0.75rem;color:#a3a6b7;">正面</div>
+    </div>
+    <div class="section-card" style="text-align:center;padding:12px;">
+      <div style="font-size:1.5rem;font-weight:700;color:#f56c6c;">{{ reviewStats.sentiment_distribution?.negative || 0 }}</div>
+      <div style="font-size:0.75rem;color:#a3a6b7;">负面</div>
+    </div>
+    <div class="section-card" style="text-align:center;padding:12px;">
+      <div style="font-size:1.5rem;font-weight:700;color:#e6a23c;">{{ reviewStats.avg_rating || 'N/A' }}</div>
+      <div style="font-size:0.75rem;color:#a3a6b7;">平均分</div>
+    </div>
+    <div class="section-card" style="text-align:center;padding:12px;">
+      <div style="font-size:1.5rem;font-weight:700;color:#409EFF;">{{ Object.keys(reviewStats.platform_distribution || {}).length }}</div>
+      <div style="font-size:0.75rem;color:#a3a6b7;">来源平台</div>
+    </div>
+  </div>
+
+  <!-- 主体 -->
+  <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;">
+    <!-- 左：评价列表 -->
+    <div>
+      <div class="section-card" v-for="r in reviewList" :key="r.id" style="padding:16px;margin-bottom:12px;border-left:3px solid;border-left-color:getReviewBorderColor(r.sentiment)">
+        <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px;">
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+            <el-tag size="small" :type="sentimentTagType(r.sentiment)">{{ sentimentLabel(r.sentiment) }}</el-tag>
+            <el-tag size="small" type="info">{{ r.platform }}</el-tag>
+            <span v-if="r.author" style="font-size:0.75rem;color:#a3a6b7;">@{{ r.author }}</span>
+            <span v-if="r.rating" style="font-size:0.75rem;color:#e6a23c;">★ {{ r.rating.toFixed(1) }}</span>
+          </div>
+          <div style="display:flex;gap:10px;font-size:0.75rem;color:#a3a6b7;">
+            <span v-if="r.likes">👍 {{ r.likes }}</span>
+            <span v-if="r.replies">💬 {{ r.replies }}</span>
+          </div>
+        </div>
+        <p style="font-size:0.85rem;line-height:1.6;color:#e2e8f0;">{{ r.content }}</p>
+        <div v-if="r.llm_summary" style="margin-top:8px;padding:8px;background:rgba(144,147,255,0.08);border-radius:6px;font-size:0.75rem;color:#b0b3ff;">
+          🤖 {{ r.llm_summary }}
+        </div>
+        <div v-if="r.llm_tags?.length" style="margin-top:6px;">
+          <el-tag v-for="t in r.llm_tags" :key="t" size="small" type="info" effect="plain" style="margin:2px;">{{ t }}</el-tag>
+        </div>
+        <a v-if="r.source_url" :href="r.source_url" target="_blank" style="font-size:0.75rem;color:#409EFF;margin-top:4px;display:inline-block;">查看原文 →</a>
+      </div>
+
+      <!-- 分页 -->
+      <div style="display:flex;justify-content:center;margin-top:16px;" v-if="reviewPagination.total_pages > 1">
+        <el-pagination
+          v-model:current-page="reviewPagination.page"
+          :page-size="20"
+          :total="reviewPagination.total"
+          layout="prev, pager, next"
+          @current-change="loadReviews"
+        />
+      </div>
+
+      <div v-if="!reviewList.length" class="section-card" style="text-align:center;padding:40px;color:#a3a6b7;">
+        暂无评价数据，点击「📥 导入种子评价」添加
+      </div>
+    </div>
+
+    <!-- 右：分析面板 -->
+    <div>
+      <!-- 站点下钻 -->
+      <div class="section-card" style="padding:16px;margin-bottom:12px;">
+        <h3 style="font-size:0.85rem;font-weight:600;color:#a3a6b7;margin-bottom:10px;">🔍 站点评价下钻</h3>
+        <el-select v-model="drilldownSiteId" placeholder="选择站点查看详情..." clearable style="width:100%" @change="loadDrilldown">
+          <el-option v-for="s in reviewSites" :key="s.id" :label="s.name" :value="s.id" />
+        </el-select>
+        <div v-if="drilldownData.stats" style="margin-top:10px;font-size:0.8rem;">
+          <div style="font-weight:600;margin-bottom:6px;">{{ drilldownData.site?.name }} <el-tag size="small" :type="drilldownData.site?.risk_level==='low'?'success':drilldownData.site?.risk_level==='high'?'danger':'warning'">{{ drilldownData.site?.risk_level }}</el-tag></div>
+          <div style="display:flex;justify-content:space-between;margin:4px 0;color:#a3a6b7;"><span>总评价</span><span>{{ drilldownData.stats.total_reviews }}</span></div>
+          <div style="display:flex;justify-content:space-between;margin:4px 0;color:#a3a6b7;"><span>平均分</span><span>{{ drilldownData.stats.avg_rating || 'N/A' }}</span></div>
+          <div style="display:flex;gap:4px;margin-top:6px;">
+            <template v-for="(count, sent) in drilldownData.stats.sentiment_distribution" :key="sent">
+              <el-tag size="small" :type="sentimentTagType(sent)">{{ sentimentLabel(sent) }} {{ count }}</el-tag>
+            </template>
+          </div>
+        </div>
+      </div>
+
+      <!-- LLM 分析结果 -->
+      <div v-if="analysisResult.llm_summary" class="section-card" style="padding:16px;margin-bottom:12px;">
+        <h3 style="font-size:0.85rem;font-weight:600;color:#a3a6b7;margin-bottom:10px;">🤖 LLM 分析结果</h3>
+        <div v-if="analysisResult.site_name" style="font-size:0.8rem;font-weight:600;margin-bottom:6px;">{{ analysisResult.site_name }}</div>
+        <div style="padding:10px;background:rgba(144,147,255,0.08);border-radius:8px;font-size:0.8rem;color:#b0b3ff;margin-bottom:8px;">{{ analysisResult.llm_summary }}</div>
+        <div v-if="analysisResult.highlights?.length" style="margin-bottom:8px;">
+          <div style="font-size:0.75rem;color:#67c23a;margin-bottom:4px;">👍 代表性正面</div>
+          <div v-for="h in analysisResult.highlights" :key="h.content" style="font-size:0.75rem;background:rgba(103,194,58,0.08);padding:6px 8px;border-radius:4px;margin:3px 0;">{{ h.content }}</div>
+        </div>
+        <div v-if="analysisResult.risks?.length">
+          <div style="font-size:0.75rem;color:#f56c6c;margin-bottom:4px;">⚠️ 风险评价</div>
+          <div v-for="r in analysisResult.risks" :key="r.content" style="font-size:0.75rem;background:rgba(245,108,108,0.08);padding:6px 8px;border-radius:4px;margin:3px 0;">{{ r.content }}</div>
+        </div>
+      </div>
+
+      <!-- 平台分布 -->
+      <div class="section-card" style="padding:16px;">
+        <h3 style="font-size:0.85rem;font-weight:600;color:#a3a6b7;margin-bottom:10px;">📱 平台分布</h3>
+        <div v-for="(count, plat) in reviewStats.platform_distribution" :key="plat" style="display:flex;justify-content:space-between;padding:4px 0;font-size:0.8rem;">
+          <span>{{ plat }}</span><span style="color:#a3a6b7;">{{ count }}</span>
+        </div>
+        <div v-if="!reviewStats.platform_distribution || !Object.keys(reviewStats.platform_distribution).length" style="color:#a3a6b7;font-size:0.8rem;">暂无数据</div>
+      </div>
+    </div>
+  </div>
+</div>

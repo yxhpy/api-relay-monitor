@@ -63,6 +63,8 @@ class RelaySite(Base):
     # 关系
     crawl_results = relationship("CrawlResult", back_populates="relay_site", lazy="noload")
     price_histories = relationship("PriceHistory", back_populates="relay_site", lazy="noload")
+    reviews = relationship("SiteReview", back_populates="relay_site", lazy="noload",
+                           order_by="desc(SiteReview.posted_at)")
 
 
 class CrawlResult(Base):
@@ -114,3 +116,33 @@ class AnalysisReport(Base):
     top_picks = Column(JSON, nullable=True, comment="推荐站点JSON")
     risk_alerts = Column(JSON, nullable=True, comment="风险提醒JSON")
     created_at = Column(DateTime, default=_utcnow, comment="创建时间")
+
+
+class SiteReview(Base):
+    """站点评价表 — 存储从各渠道抓取的用户真实评价"""
+    __tablename__ = "site_reviews"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    relay_site_id = Column(Integer, ForeignKey("relay_sites.id"), nullable=False, index=True,
+                           comment="关联中转站ID")
+    platform = Column(String(50), nullable=False,
+                      comment="评价来源: linux_do/v2ex/x/telegram/reddit")
+    source_url = Column(String(500), nullable=True, comment="评价原文URL")
+    author = Column(String(200), nullable=True, comment="评价者")
+    content = Column(Text, nullable=False, comment="评价原文内容")
+    sentiment = Column(
+        SQLEnum("positive", "negative", "neutral", "mixed", name="sentiment_enum"),
+        default="neutral", comment="情感倾向",
+    )
+    sentiment_score = Column(Float, nullable=True, comment="情感评分 -1.0~1.0")
+    rating = Column(Float, nullable=True, comment="用户打分 1-10")
+    likes = Column(Integer, default=0, comment="点赞数")
+    replies = Column(Integer, default=0, comment="回复数")
+    posted_at = Column(DateTime, nullable=True, comment="评价发布时间")
+    crawled_at = Column(DateTime, default=_utcnow, comment="爬取时间")
+    llm_summary = Column(Text, nullable=True, comment="LLM 生成的评价摘要")
+    llm_tags = Column(JSON, nullable=True, comment="LLM 提取的标签列表")
+    created_at = Column(DateTime, default=_utcnow, comment="创建时间")
+
+    # 关系
+    relay_site = relationship("RelaySite", back_populates="reviews")

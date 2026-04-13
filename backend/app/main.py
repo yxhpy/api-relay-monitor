@@ -60,12 +60,13 @@ app.add_middleware(
 )
 
 # 注册路由（必须在静态文件 mount 之前）
-from app.routers import relay_sites, crawl_tasks, analysis, dashboard  # noqa: E402
+from app.routers import relay_sites, crawl_tasks, analysis, dashboard, reviews  # noqa: E402
 
 app.include_router(relay_sites.router)
 app.include_router(crawl_tasks.router)
 app.include_router(analysis.router)
 app.include_router(dashboard.router)
+app.include_router(reviews.router)
 
 
 @app.get("/health", tags=["系统"])
